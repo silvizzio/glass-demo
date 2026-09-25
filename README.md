@@ -29,3 +29,7 @@ The background, logos, and media come from the Figma frame assets already in thi
 npm run typecheck
 npm run build
 ```
+
+## Library for index.html
+
+`vendor/liquid-dom-core.js` is `@liquid-dom/core` built from GitHub master (commit dd342ab). The single-file prototype `index.html` loads it. Do not replace it with the npm release 0.1.1: that release uses the old Chrome copy API, and all panels render empty.

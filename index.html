@@ -545,7 +545,8 @@
 </template>
 
 <script type="module">
-  const CORE_URL = 'https://esm.sh/@liquid-dom/core@0.1.1';
+  // liquid-dom core, built from GitHub master. The npm release 0.1.1 uses the old Chrome copy API and renders empty content.
+  const CORE_URL = './vendor/liquid-dom-core.js';
   const W = 1920;
   const H = 1080;
   const YEARS = ['2026', '2030', '2035', '2040', '2043'];
