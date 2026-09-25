@@ -65,3 +65,16 @@ The glass is computed live from the pixels behind each panel. To show this, the 
 | + and − | Zoom in steps |
 | Handle on the District IO card | Move the card over the background |
 | No input for 5 seconds | Ambient drift: the map rotates slowly, the render floats. Stops at the first touch. Off with reduced motion. |
+
+## Glass tone (index.html)
+
+Every mode has a dark base (default) and a light base. Use **Dark | Light** in the top-center bar, the keys `D` and `L`, or `?tone=dark|light` in the URL. The switch is live, with no reload. Text stays white in both tones; the light tone adds a stronger text shadow.
+
+| Mode | Dark base | Light base |
+| --- | --- | --- |
+| Liquid DOM | black tint 28%, specular 0.25 | white tint 14%, specular 0.45 |
+| SVG backdrop | black panel tint 28%, darkness layer 40, lightness 8 | white panel tint 10%, darkness 8, lightness 40 |
+| WebGL glass | black fill 20%, brightness −0.12, saturation −0.1 | white fill 14%, brightness +0.06, saturation +0.1 |
+| glasscn | black fill 28%, rim light 0.18, rim dark 0.35 | white fill 8%, rim light 0.35, rim dark 0.15 |
+
+The presets are in `TONE_PRESETS` in `index.html`. With `?tune`, the sliders edit the active tone, and "Copy values" includes the tone name.
