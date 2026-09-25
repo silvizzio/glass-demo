@@ -781,7 +781,8 @@
   const TONE_PRESETS = {
     dom: {
       dark: { tint: { r: 0, g: 0, b: 0, a: 0.28 }, specularOpacity: 0.25, shadowColor: { r: 0, g: 0, b: 0, a: 0.22 } },
-      light: { tint: { r: 255, g: 255, b: 255, a: 0.14 }, specularOpacity: 0.45, shadowColor: { r: 0, g: 0, b: 0, a: 0.12 } },
+      // liquid-dom colour channels are 0 to 1, not 0 to 255
+      light: { tint: { r: 1, g: 1, b: 1, a: 0.14 }, specularOpacity: 0.45, shadowColor: { r: 0, g: 0, b: 0, a: 0.12 } },
     },
     backdrop: {
       dark: { tint: 0.28, darknessOpacity: 40, lightnessOpacity: 8 },
