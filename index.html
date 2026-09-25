@@ -7,6 +7,7 @@
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.31.0/mapbox-gl.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -74,6 +75,41 @@
     transform-origin: 50% 50%;
     transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
+  .backdrop .map { position: absolute; inset: 0; }
+  body[data-bg="map"] .backdrop .render { visibility: hidden; }
+  body[data-bg="image"] .backdrop .map { visibility: hidden; }
+  body.dragging .backdrop .render, body.drifting .backdrop .render { transition: none; }
+  .backdrop .mapboxgl-ctrl-bottom-right { right: 8px; bottom: 4px; }
+
+  /* Input plane for the background: drag to pan, wheel or pinch to zoom, double-click to reset */
+  #stage > .pan-plane { position: absolute; cursor: grab; touch-action: none; }
+  body.dragging #stage > .pan-plane { cursor: grabbing; }
+
+  /* Drag handle on the District IO card */
+  .grip {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    z-index: 2;
+    width: 96px;
+    height: 20px;
+    transform: translateX(-50%);
+    cursor: grab;
+    touch-action: none;
+  }
+  .grip::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 8px;
+    width: 40px;
+    height: 4px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.4);
+    transform: translateX(-50%);
+  }
+  body.dragging .grip { cursor: grabbing; }
+
   .backdrop .shadow {
     position: absolute;
     inset: 0;
@@ -349,6 +385,7 @@
   #modes button.on { background: var(--white); color: #000; }
   #modes button.na { opacity: 0.45; }
   #modes kbd { font-family: inherit; opacity: 0.55; margin-right: 4px; }
+  #modes .sep { width: 1px; margin: 4px 4px; background: rgba(255, 255, 255, 0.2); }
 
   #tune {
     position: fixed;
@@ -389,6 +426,9 @@
 <div id="modes" role="group" aria-label="Glass renderer">
   <button type="button" data-mode="dom"><kbd>1</kbd>Liquid DOM</button>
   <button type="button" data-mode="backdrop"><kbd>2</kbd>SVG backdrop</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" data-bg="map"><kbd>M</kbd>Map</button>
+  <button type="button" data-bg="image"><kbd>I</kbd>Image</button>
 </div>
 
 <div id="lens-defs" aria-hidden="true"></div>
@@ -399,6 +439,7 @@
   <!-- Backdrop: the render must be inside the scene so the glass can refract it -->
   <div class="backdrop" data-part="backdrop">
     <img class="render" src="assets/bg/dso-render.png" alt="Aerial render of Dubai Silicon Oasis">
+    <div class="map" data-ref="map" aria-label="Satellite map of Dubai Silicon Oasis"></div>
     <div class="shadow"></div>
   </div>
 
@@ -522,6 +563,7 @@
 
   <!-- District IO detail card -->
   <div class="panel" data-panel="card">
+    <span class="grip" data-drag="card" aria-label="Move card" title="Drag to move"></span>
     <div class="detail">
       <div class="detail-body">
         <div class="detail-head">
@@ -596,6 +638,7 @@
   </div>
 </template>
 
+<script src="config.js"></script>
 <script type="module">
   // liquid-dom core, built from GitHub master. The npm release 0.1.1 uses the old Chrome copy API and renders empty content.
   const CORE_URL = './vendor/liquid-dom-core.js';
@@ -639,6 +682,15 @@
     tint: 0.12,
   };
   const LENS_MARGIN = 48;
+
+  // Background: live Mapbox satellite map (default) or the static render
+  const MAPBOX_JS = 'https://api.mapbox.com/mapbox-gl-js/v3.31.0/mapbox-gl.js';
+  // Token comes from config.js (git-ignored locally, written from MAPBOX_TOKEN on Vercel)
+  const MAPBOX_TOKEN = globalThis.GLASS_CONFIG?.mapboxToken || '';
+  const MAP_HOME = { center: [55.38111, 25.12417], zoom: 15.6, pitch: 50, bearing: 200 };
+  const MAP_ZOOM = { min: 13, max: 19, step: 0.5 };
+  const IDLE_MS = 5000;
+  const DRIFT = { mapDegPerSec: 2.5, imagePan: 28, imageZoom: 0.05, imagePeriod: 24 };
 
   // Geometry from Figma frame "UI 5" (node 1137:43652), 1920 x 1080
   const PANELS = [
@@ -687,16 +739,23 @@
   // Mode-specific hooks, filled by the active renderer
   const view = {
     setVisible: () => {},
+    movePanel: () => {},
   };
 
   /* ---------- Stage: DOM copy of the UI, scaled to the viewport ---------- */
   // Fallback mode: the stage is the visible UI. Glass mode: the stage is an invisible hit layer on top of the canvas.
+  const panPlane = document.createElement('div');
+  panPlane.className = 'pan-plane';
+  panPlane.setAttribute('aria-hidden', 'true');
+  let stageScale = 1;
+
   function mountStage({ withBackdrop, onFit }) {
     const stage = document.getElementById('stage');
     if (withBackdrop) {
       stage.append(backdrop);
       backdrop.style.position = 'absolute';
     }
+    stage.append(panPlane);
     for (const p of PANELS) {
       p.el.style.left = `${p.x}px`;
       p.el.style.top = `${p.y}px`;
@@ -707,6 +766,12 @@
       const ox = (innerWidth - W * s) / 2;
       const oy = (innerHeight - H * s) / 2;
       stage.style.transform = `translate(${ox}px, ${oy}px) scale(${s})`;
+      stageScale = s;
+      const plane = bleedRect(s, ox, oy);
+      panPlane.style.left = `${plane.x}px`;
+      panPlane.style.top = `${plane.y}px`;
+      panPlane.style.width = `${plane.width}px`;
+      panPlane.style.height = `${plane.height}px`;
       if (withBackdrop) {
         const bleed = bleedRect(s, ox, oy);
         backdrop.style.left = `${bleed.x}px`;
@@ -795,6 +860,13 @@
       p.el.addEventListener('pointerdown', down);
       for (const type of ['pointerup', 'pointerleave', 'pointercancel']) p.el.addEventListener(type, up);
     }
+
+    view.movePanel = (p) => {
+      p.el.style.left = `${p.x}px`;
+      p.el.style.top = `${p.y}px`;
+      p.glass.x = p.x;
+      p.glass.y = p.y;
+    };
 
     view.setVisible = (p, visible) => {
       if (p.visible === visible) return;
@@ -977,6 +1049,13 @@
       p.lens.classList.toggle('is-hidden', !visible);
     };
 
+    view.movePanel = (p) => {
+      p.el.style.left = `${p.x}px`;
+      p.el.style.top = `${p.y}px`;
+      p.lens.style.left = `${p.x - LENS_MARGIN}px`;
+      p.lens.style.top = `${p.y - LENS_MARGIN}px`;
+    };
+
     if (params.has('tune')) {
       buildTuner({
         controls: [
@@ -1111,7 +1190,7 @@
     all('[data-ref="hero"]').forEach((el) => { if (el.getAttribute('src') !== ui.hero) el.src = ui.hero; });
     all('.thumb').forEach((el) => el.classList.toggle('on', el.dataset.value === ui.hero));
 
-    all('.backdrop .render').forEach((el) => { el.style.transform = `scale(${ui.zoom})`; });
+    applyRenderTransform();
   }
 
   document.addEventListener('click', (event) => {
@@ -1132,7 +1211,7 @@
       if (ui.toggles.has(value)) ui.toggles.delete(value);
       else ui.toggles.add(value);
     } else if (action === 'zoom') {
-      ui.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ui.zoom + Number(value) * ZOOM_STEP));
+      background.zoomBy(Number(value));
     } else if (action === 'close-card') {
       view.setVisible(panel('card'), false);
     } else if (action === 'open-card') {
@@ -1149,6 +1228,265 @@
     }
     applyState();
   });
+
+  /* ---------- Background: Mapbox satellite or static render ---------- */
+  const imageView = { x: 0, y: 0, drift: { x: 0, y: 0, z: 1 } };
+
+  function clampImagePan() {
+    // The pan plane has the same size as the backdrop and is always laid out in the page
+    const w = panPlane.offsetWidth;
+    const h = panPlane.offsetHeight;
+    const maxX = ((ui.zoom - 1) * w) / 2;
+    const maxY = ((ui.zoom - 1) * h) / 2;
+    imageView.x = Math.max(-maxX, Math.min(maxX, imageView.x));
+    imageView.y = Math.max(-maxY, Math.min(maxY, imageView.y));
+  }
+
+  function applyRenderTransform() {
+    clampImagePan();
+    const d = imageView.drift;
+    const t = `translate(${imageView.x + d.x}px, ${imageView.y + d.y}px) scale(${ui.zoom * d.z})`;
+    all('.backdrop .render').forEach((el) => { el.style.transform = t; });
+  }
+
+  const background = {
+    kind: 'map',
+    map: null,
+    mapFailed: false,
+    loading: null,
+
+    async set(kind) {
+      if (kind === 'map' && this.mapFailed) kind = 'image';
+      this.kind = kind;
+      document.body.dataset.bg = kind;
+      document.querySelectorAll('#modes [data-bg]').forEach((el) => {
+        el.classList.toggle('on', el.dataset.bg === kind);
+        el.setAttribute('aria-pressed', String(el.dataset.bg === kind));
+      });
+      const url = new URL(location.href);
+      url.searchParams.set('bg', kind);
+      history.replaceState(null, '', url.toString());
+      if (kind === 'map') await this.ensureMap();
+    },
+
+    ensureMap() {
+      if (this.map || this.loading) return this.loading;
+      this.loading = new Promise((resolve) => {
+        const fail = (reason) => {
+          console.error('Mapbox failed.', reason);
+          this.mapFailed = true;
+          showNotice('The satellite map did not load. Showing the render.');
+          this.set('image');
+          resolve();
+        };
+        const create = () => {
+          if (!MAPBOX_TOKEN) return fail('No Mapbox token. Add config.js locally, or MAPBOX_TOKEN on Vercel.');
+          try {
+            mapboxgl.accessToken = MAPBOX_TOKEN;
+            const container = backdrop.querySelector('[data-ref="map"]');
+            const map = new mapboxgl.Map({
+              container,
+              style: 'mapbox://styles/mapbox/satellite-v9',
+              ...MAP_HOME,
+              interactive: false,
+              preserveDrawingBuffer: true,
+              fadeDuration: 0,
+              logoPosition: 'bottom-right',
+              attributionControl: true,
+            });
+            map.on('error', (event) => {
+              if (event?.error?.status === 401 || event?.error?.status === 403) fail(event.error);
+            });
+            new ResizeObserver(() => map.resize()).observe(container);
+            this.map = map;
+            resolve();
+          } catch (error) {
+            fail(error);
+          }
+        };
+        if (globalThis.mapboxgl) return create();
+        const script = document.createElement('script');
+        script.src = MAPBOX_JS;
+        script.onload = create;
+        script.onerror = () => fail('script');
+        document.head.append(script);
+      });
+      return this.loading;
+    },
+
+    panBy(dx, dy) {
+      if (this.kind === 'map' && this.map) {
+        this.map.panBy([-dx, -dy], { duration: 0 });
+      } else {
+        imageView.x += dx;
+        imageView.y += dy;
+        applyRenderTransform();
+      }
+    },
+
+    zoomAt(delta, point) {
+      if (this.kind === 'map' && this.map) {
+        const zoom = Math.max(MAP_ZOOM.min, Math.min(MAP_ZOOM.max, this.map.getZoom() + delta));
+        const around = point ? this.map.unproject(point) : undefined;
+        this.map.zoomTo(zoom, { duration: 0, around });
+      } else {
+        const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ui.zoom * Math.pow(2, delta)));
+        if (point) {
+          // Keep the point under the cursor fixed
+          const cx = panPlane.offsetWidth / 2 + imageView.x;
+          const cy = panPlane.offsetHeight / 2 + imageView.y;
+          const k = next / ui.zoom;
+          imageView.x += (point[0] - cx) * (1 - k);
+          imageView.y += (point[1] - cy) * (1 - k);
+        }
+        ui.zoom = next;
+        applyRenderTransform();
+      }
+    },
+
+    zoomBy(direction) {
+      if (this.kind === 'map' && this.map) {
+        const zoom = Math.max(MAP_ZOOM.min, Math.min(MAP_ZOOM.max, this.map.getZoom() + direction * MAP_ZOOM.step));
+        this.map.easeTo({ zoom, duration: 400 });
+      } else {
+        ui.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ui.zoom + direction * ZOOM_STEP));
+        applyRenderTransform();
+      }
+    },
+
+    reset() {
+      if (this.kind === 'map' && this.map) {
+        this.map.flyTo({ ...MAP_HOME, duration: 1200 });
+      } else {
+        ui.zoom = 1;
+        imageView.x = 0;
+        imageView.y = 0;
+        applyRenderTransform();
+      }
+    },
+  };
+
+  /* ---------- Input: drag, wheel, pinch, double-click, and the card handle ---------- */
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let lastInput = performance.now();
+  const touch = () => {
+    lastInput = performance.now();
+    document.body.classList.remove('drifting');
+  };
+
+  // Point in backdrop px (the map container and the render share this space)
+  function toBackdrop(event) {
+    const rect = panPlane.getBoundingClientRect();
+    return [(event.clientX - rect.left) / stageScale, (event.clientY - rect.top) / stageScale];
+  }
+
+  const pointers = new Map();
+  let pinchDistance = 0;
+  panPlane.addEventListener('pointerdown', (event) => {
+    touch();
+    panPlane.setPointerCapture(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    document.body.classList.add('dragging');
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinchDistance = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  });
+  panPlane.addEventListener('pointermove', (event) => {
+    const prev = pointers.get(event.pointerId);
+    if (!prev) return;
+    touch();
+    const next = { x: event.clientX, y: event.clientY };
+    pointers.set(event.pointerId, next);
+    if (pointers.size === 1) {
+      background.panBy((next.x - prev.x) / stageScale, (next.y - prev.y) / stageScale);
+    } else if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinchDistance > 0) {
+        const mid = { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 };
+        background.zoomAt(Math.log2(distance / pinchDistance), toBackdrop(mid));
+      }
+      pinchDistance = distance;
+    }
+  });
+  const release = (event) => {
+    pointers.delete(event.pointerId);
+    if (pointers.size < 2) pinchDistance = 0;
+    if (pointers.size === 0) document.body.classList.remove('dragging');
+  };
+  for (const type of ['pointerup', 'pointercancel']) panPlane.addEventListener(type, release);
+  panPlane.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    touch();
+    const unit = event.deltaMode === 1 ? 16 : 1;
+    background.zoomAt((-event.deltaY * unit) / 500, toBackdrop(event));
+  }, { passive: false });
+  panPlane.addEventListener('dblclick', () => {
+    touch();
+    background.reset();
+  });
+
+  // Drag handle: moves the District IO card and its glass
+  document.addEventListener('pointerdown', (event) => {
+    const grip = event.target.closest('[data-drag]');
+    if (!grip || !grip.closest('#stage')) return;
+    event.preventDefault();
+    touch();
+    const p = panel(grip.dataset.drag);
+    const start = { x: event.clientX, y: event.clientY, px: p.x, py: p.y };
+    grip.setPointerCapture(event.pointerId);
+    document.body.classList.add('dragging');
+    const move = (e) => {
+      touch();
+      p.x = Math.max(0, Math.min(W - p.w, start.px + (e.clientX - start.x) / stageScale));
+      p.y = Math.max(72, Math.min(H - p.h, start.py + (e.clientY - start.y) / stageScale));
+      view.movePanel(p);
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+      document.body.classList.remove('dragging');
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  });
+  document.addEventListener('pointerdown', touch, true);
+  document.addEventListener('keydown', touch, true);
+
+  // Ambient drift after IDLE_MS without input: the map rotates slowly, the render floats
+  let driftClock = 0;
+  let driftLast = performance.now();
+  function driftFrame(now) {
+    const dt = Math.min(0.05, (now - driftLast) / 1000);
+    driftLast = now;
+    const idle = !reduceMotion && now - lastInput > IDLE_MS && pointers.size === 0;
+    if (idle) {
+      document.body.classList.add('drifting');
+      driftClock += dt;
+      if (background.kind === 'map' && background.map) {
+        background.map.setBearing(background.map.getBearing() + DRIFT.mapDegPerSec * dt);
+      } else {
+        const phase = (driftClock / DRIFT.imagePeriod) * Math.PI * 2;
+        imageView.drift = {
+          x: Math.sin(phase) * DRIFT.imagePan,
+          y: Math.sin(phase * 0.7) * DRIFT.imagePan * 0.6,
+          z: 1 + DRIFT.imageZoom * (0.5 - 0.5 * Math.cos(phase)),
+        };
+        applyRenderTransform();
+      }
+    } else if (imageView.drift.z !== 1 || imageView.drift.x !== 0) {
+      // Keep the drifted framing when input starts, so the image does not jump
+      imageView.x += imageView.drift.x;
+      imageView.y += imageView.drift.y;
+      ui.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ui.zoom * imageView.drift.z));
+      imageView.drift = { x: 0, y: 0, z: 1 };
+      applyRenderTransform();
+    }
+    requestAnimationFrame(driftFrame);
+  }
 
   /* ---------- Render mode switch ---------- */
   const MODES = ['dom', 'backdrop'];
@@ -1167,7 +1505,10 @@
 
   function setupModeSwitch(active) {
     const bar = document.getElementById('modes');
-    bar.querySelectorAll('button').forEach((el) => {
+    bar.querySelectorAll('button[data-bg]').forEach((el) => {
+      el.addEventListener('click', () => background.set(el.dataset.bg));
+    });
+    bar.querySelectorAll('button[data-mode]').forEach((el) => {
       el.classList.toggle('on', el.dataset.mode === active);
       el.setAttribute('aria-pressed', String(el.dataset.mode === active));
       if (el.dataset.mode === 'dom' && !domSupported) {
@@ -1178,6 +1519,9 @@
     });
     addEventListener('keydown', (event) => {
       if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest?.('input, textarea')) return;
+      const key = event.key.toLowerCase();
+      if (key === 'm') return background.set('map');
+      if (key === 'i') return background.set('image');
       const next = MODES[Number(event.key) - 1];
       if (next && next !== active) goToMode(next);
     });
@@ -1227,7 +1571,9 @@
 
   const activeMode = await boot(mode);
   setupModeSwitch(activeMode);
+  await background.set(params.get('bg') === 'image' ? 'image' : 'map');
   requestAnimationFrame(applyState);
+  requestAnimationFrame(driftFrame);
 </script>
 </body>
 </html>

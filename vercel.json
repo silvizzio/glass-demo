@@ -1,6 +1,6 @@
 {
   "framework": null,
   "installCommand": "echo skip install",
-  "buildCommand": "rm -rf dist && mkdir dist && cp -R index.html assets vendor dist/",
+  "buildCommand": "rm -rf dist && mkdir dist && cp -R index.html assets vendor dist/ && printf \"window.GLASS_CONFIG = { mapboxToken: '%s' };\\n\" \"$MAPBOX_TOKEN\" > dist/config.js",
   "outputDirectory": "dist"
 }

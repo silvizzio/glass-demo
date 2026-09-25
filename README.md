@@ -46,3 +46,18 @@ The single-file demo has two renderers for the same UI. Use the switch at top ce
 Default: Liquid DOM when the browser supports it, else SVG backdrop. Add `?tune` for optics sliders of the active mode.
 
 SVG backdrop generates one filter for each panel, sized to that panel. Each lens is larger than its panel, so the edge refraction can sample pixels outside the panel, and a rounded-rect mask clips the result to the panel shape.
+
+## Background (index.html)
+
+The glass is computed live from the pixels behind each panel. To show this, the background moves.
+
+| Control | Result |
+| --- | --- |
+| **Map** (default) or `M` | Live Mapbox satellite map of Dubai Silicon Oasis (`?bg=map`) |
+| **Image** or `I` | The static Figma render (`?bg=image`) |
+| Drag | Pan the map or the render |
+| Wheel or pinch | Zoom at the pointer |
+| Double-click | Reset the view |
+| + and − | Zoom in steps |
+| Handle on the District IO card | Move the card over the background |
+| No input for 5 seconds | Ambient drift: the map rotates slowly, the render floats. Stops at the first touch. Off with reduced motion. |
