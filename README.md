@@ -36,13 +36,14 @@ npm run build
 
 ## Render modes (index.html)
 
-The single-file demo has three renderers for the same UI. Use the switch at top center, the keys `1`, `2`, `3`, or `?glass=` in the URL.
+The single-file demo has four renderers for the same UI. Use the switch at top center, the keys `1` to `4`, or `?glass=` in the URL. All modes use the same plain 20 px rounded-rect corners.
 
 | Mode | URL | Technique | Browsers |
 | --- | --- | --- | --- |
 | Liquid DOM | `?glass=dom` | [liquid-dom](https://github.com/AndrewPrifer/liquid-dom), WebGPU | Desktop Chrome with `chrome://flags/#canvas-draw-element` enabled |
 | SVG backdrop | `?glass=backdrop` | `backdrop-filter: url(#svg-filter)`, after [rebane2001's gist](https://gist.github.com/rebane2001/8ba35ad6e1b17c4cb5b2b2431d9e992c) | Chromium browsers (Chrome, Edge, Arc) |
 | WebGL glass | `?glass=webgl` | [ybouane/liquidglass](https://github.com/ybouane/liquidglass) 1.0.3, WebGL 1 refraction shader over a captured backdrop | Chrome, Safari, Firefox, Edge, desktop and mobile |
+| glasscn | `?glass=glasscn` | Port of the `liquid-refract` variant of [glasscn](https://github.com/kostyniuk/glasscn-components) (MIT): SDF bezel displacement map in `backdrop-filter`, blur, saturation, iOS-style rim | Chromium browsers (Chrome, Edge, Arc) |
 
 Default: Liquid DOM when the browser supports it, else WebGL glass. Add `?tune` for optics sliders of the active mode.
 

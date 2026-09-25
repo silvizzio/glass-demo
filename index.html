@@ -120,9 +120,9 @@
 
   /* Panels: glass mode keeps content clear, the glass renders the surface */
   .panel { position: relative; overflow: hidden; border-radius: 20px; }
-  body.bd .panel.is-hidden { display: none; }
-  body.bd .press { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-  body.bd .press:active { transform: scale(0.96); }
+  body:is(.bd, .gc) .panel.is-hidden { display: none; }
+  body:is(.bd, .gc) .press { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  body:is(.bd, .gc) .press:active { transform: scale(0.96); }
 
   /* SVG backdrop glass (rebane2001 gist): each lens runs an SVG filter on the backdrop behind it */
   body.bd .panel {
@@ -131,6 +131,27 @@
       linear-gradient(90deg, rgba(0, 0, 0, var(--bd-tint, 0.12)) 0%, rgba(0, 0, 0, var(--bd-tint, 0.12)) 100%);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
   }
+  /* glasscn refract (kostyniuk/glasscn-components, MIT): backdrop-filter on the panel itself,
+     SDF bezel displacement map, light blur and saturation, iOS-style rim */
+  body.gc .panel {
+    background:
+      linear-gradient(90deg, rgba(0, 0, 0, var(--gc-tint, 0.12)) 0%, rgba(0, 0, 0, var(--gc-tint, 0.12)) 100%);
+  }
+  .gc-rim {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: var(--liquid-glass-rim-width, 0.5px);
+    background:
+      linear-gradient(to right, rgba(255, 255, 255, 0), var(--liquid-glass-rim-light, rgba(255, 255, 255, 0.25)) var(--liquid-glass-rim-fade, 18%), var(--liquid-glass-rim-light, rgba(255, 255, 255, 0.25)) calc(100% - var(--liquid-glass-rim-fade, 18%)), rgba(255, 255, 255, 0)),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0), var(--liquid-glass-rim-dark, rgba(0, 0, 0, 0.2)) var(--liquid-glass-rim-fade, 18%), var(--liquid-glass-rim-dark, rgba(0, 0, 0, 0.2)) calc(100% - var(--liquid-glass-rim-fade, 18%)), rgba(0, 0, 0, 0));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+
   #stage > .lens {
     position: absolute;
     pointer-events: none;
@@ -189,9 +210,9 @@
     border-radius: 20px;
   }
   .tab.on { font-weight: 600; background: rgba(0, 0, 0, 0.1); }
-  body.bd .panel[data-panel^="tab-"] { background: var(--surface-quiet); }
-  body.bd .panel[data-panel^="tab-"].on { background: var(--surface-active); }
-  body.bd .tab.on { background: none; }
+  body:is(.bd, .gc) .panel[data-panel^="tab-"] { background: var(--surface-quiet); }
+  body:is(.bd, .gc) .panel[data-panel^="tab-"].on { background: var(--surface-active); }
+  body:is(.bd, .gc) .tab.on { background: none; }
 
   /* Timeline */
   .timeline { display: flex; align-items: center; width: 100%; height: 100%; padding: 12px 16px; gap: 8px; }
@@ -429,7 +450,7 @@
   #tune .row button { flex: 1; padding: 6px 0; border-radius: 8px; background: var(--white-10); font-size: 12px; }
 
   @media (prefers-reduced-motion: reduce) {
-    .backdrop .render, .tl-thumb, body.bd .press, #stage > .lens { transition: none; }
+    .backdrop .render, .tl-thumb, body:is(.bd, .gc) .press, #stage > .lens { transition: none; }
   }
 </style>
 </head>
@@ -446,6 +467,7 @@
   <button type="button" data-mode="dom"><kbd>1</kbd>Liquid DOM</button>
   <button type="button" data-mode="backdrop"><kbd>2</kbd>SVG backdrop</button>
   <button type="button" data-mode="webgl"><kbd>3</kbd>WebGL glass</button>
+  <button type="button" data-mode="glasscn"><kbd>4</kbd>glasscn</button>
   <span class="sep" aria-hidden="true"></span>
   <button type="button" data-bg="map"><kbd>M</kbd>Map</button>
   <button type="button" data-bg="image"><kbd>I</kbd>Image</button>
@@ -722,6 +744,18 @@
     shadowOffsetY: 2,
   };
 
+  // glasscn refract (kostyniuk/glasscn-components, liquid-glass.tsx), starting values. Tune with ?tune.
+  // Defaults match the component: refraction 15, bezel 0.34, blur 2, saturation 1.28.
+  const GC_OPTICS = {
+    refraction: 15,
+    bezel: 0.34,
+    blur: 2,
+    saturation: 1.28,
+    rimLight: 0.25,
+    rimDark: 0.2,
+    tint: 0.12,
+  };
+
   // Background: live Mapbox satellite map (default) or the static render
   const MAPBOX_JS = 'https://api.mapbox.com/mapbox-gl-js/v3.31.0/mapbox-gl.js';
   // Token comes from config.js (git-ignored locally, written from MAPBOX_TOKEN on Vercel)
@@ -860,7 +894,7 @@
         width: p.w,
         height: p.h,
         cornerRadius: p.r,
-        cornerSmoothing: 0.6,
+        cornerSmoothing: 0, // plain rounded rect, the same shape as the SVG backdrop and CSS radius
         origin: { x: p.w / 2, y: p.h / 2 },
       });
       glass.add(new Html({ width: p.w, height: p.h, element: p.visual }));
@@ -1117,6 +1151,156 @@
           optics[key] = value;
           if (key === 'tint') document.body.style.setProperty('--bd-tint', String(value));
           else for (const item of lenses) applyLensOptics(item.lens, item.p, optics);
+        },
+        exportJson: () => ({ ...optics }),
+      });
+    }
+  }
+
+  /* ---------- glasscn refract: port of kostyniuk/glasscn-components liquid-glass.tsx (MIT) ---------- */
+  // Displacement map: signed distance to the rounded-rect contour, displacement along the outward
+  // normal, a convex squircle profile across the bezel, and a flat (sharp) centre.
+  const GC_MAX_TEXTURE = 480;
+  const GC_EDGE_TAPER = 1.25;
+  const gcMapCache = new Map();
+
+  function gcConvexSquircle(x) {
+    return Math.pow(1 - Math.pow(1 - x, 4), 0.25);
+  }
+
+  function gcDisplacementMap(width, height, radius, bezel) {
+    const key = `${width}:${height}:${radius}:${bezel}`;
+    if (gcMapCache.has(key)) return gcMapCache.get(key);
+    const downscale = Math.min(1, GC_MAX_TEXTURE / Math.max(width, height));
+    const tw = Math.max(2, Math.round(width * downscale));
+    const th = Math.max(2, Math.round(height * downscale));
+    const canvas = document.createElement('canvas');
+    canvas.width = tw;
+    canvas.height = th;
+    const ctx = canvas.getContext('2d');
+    const image = ctx.createImageData(tw, th);
+    const data = image.data;
+    const hw = width / 2;
+    const hh = height / 2;
+    const r = Math.min(radius, hw, hh);
+    const bezelPx = Math.max(1, bezel * Math.min(hw, hh));
+    for (let ty = 0; ty < th; ty += 1) {
+      for (let tx = 0; tx < tw; tx += 1) {
+        const px = ((tx + 0.5) / tw) * width - hw;
+        const py = ((ty + 0.5) / th) * height - hh;
+        const qx = Math.abs(px) - (hw - r);
+        const qy = Math.abs(py) - (hh - r);
+        let sd;
+        let dx = 0;
+        let dy = 0;
+        if (qx > 0 && qy > 0) {
+          const len = Math.hypot(qx, qy);
+          sd = len - r;
+          dx = (Math.sign(px) * qx) / len;
+          dy = (Math.sign(py) * qy) / len;
+        } else if (qx > qy) {
+          sd = qx - r;
+          dx = Math.sign(px);
+        } else {
+          sd = qy - r;
+          dy = Math.sign(py);
+        }
+        const i = (ty * tw + tx) * 4;
+        const inside = -sd;
+        if (inside <= 0) {
+          data[i] = 128;
+          data[i + 1] = 128;
+          data[i + 2] = 128;
+          data[i + 3] = 255;
+          continue;
+        }
+        const t = Math.min(1, inside / bezelPx);
+        let magnitude = 1 - gcConvexSquircle(t);
+        magnitude *= Math.min(1, inside / GC_EDGE_TAPER);
+        data[i] = Math.round(128 + dx * magnitude * 127);
+        data[i + 1] = Math.round(128 + dy * magnitude * 127);
+        data[i + 2] = 128;
+        data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+    const url = canvas.toDataURL('image/png');
+    gcMapCache.set(key, url);
+    return url;
+  }
+
+  async function startGlasscn() {
+    await document.fonts.ready;
+    document.body.classList.remove('glass', 'bd', 'wg');
+    document.body.classList.add('gc');
+    const optics = { ...GC_OPTICS };
+    const root = document.body.style;
+    const applyVars = () => {
+      root.setProperty('--gc-tint', String(optics.tint));
+      root.setProperty('--liquid-glass-rim-light', `rgba(255, 255, 255, ${optics.rimLight})`);
+      root.setProperty('--liquid-glass-rim-dark', `rgba(0, 0, 0, ${optics.rimDark})`);
+    };
+    applyVars();
+
+    const svg = el('svg', { width: 0, height: 0, 'aria-hidden': 'true' });
+    document.getElementById('lens-defs').append(svg);
+
+    const stage = mountStage({ withBackdrop: true });
+    mountHeader(stage);
+
+    // Sizes are design px: the filter works in the panel's local space, so the stage scale does not change it
+    const glasses = PANELS.map((p, index) => {
+      const id = `gc-${index}`;
+      const filter = el('filter', { id, x: 0, y: 0, width: '100%', height: '100%', 'color-interpolation-filters': 'sRGB' });
+      const image = el('feImage', { x: 0, y: 0, width: '100%', height: '100%', preserveAspectRatio: 'none', result: 'map' });
+      const disp = el('feDisplacementMap', { in: 'SourceGraphic', in2: 'map', scale: optics.refraction, xChannelSelector: 'R', yChannelSelector: 'G', result: 'displaced' });
+      filter.append(image, disp, el('feGaussianBlur', { in: 'displaced', stdDeviation: 0.15 }));
+      svg.append(filter);
+      const rim = document.createElement('span');
+      rim.className = 'gc-rim';
+      rim.setAttribute('aria-hidden', 'true');
+      p.el.append(rim);
+      return { p, id, image, disp };
+    });
+
+    const apply = () => {
+      for (const g of glasses) {
+        const url = gcDisplacementMap(Math.round(g.p.w), Math.round(g.p.h), g.p.r, optics.bezel);
+        g.image.setAttribute('href', url);
+        g.image.setAttributeNS(XLINK_NS, 'xlink:href', url);
+        g.disp.setAttribute('scale', optics.refraction);
+        const value = `url(#${g.id}) blur(${optics.blur}px) saturate(${optics.saturation})`;
+        g.p.el.style.backdropFilter = value;
+        g.p.el.style.webkitBackdropFilter = value;
+      }
+      applyVars();
+    };
+    apply();
+
+    view.setVisible = (p, visible) => {
+      p.visible = visible;
+      p.el.classList.toggle('is-hidden', !visible);
+    };
+    view.movePanel = (p) => {
+      p.el.style.left = `${p.x}px`;
+      p.el.style.top = `${p.y}px`;
+    };
+
+    if (params.has('tune')) {
+      buildTuner({
+        controls: [
+          ['refraction', 0, 80, 1],
+          ['bezel', 0.05, 1, 0.01],
+          ['blur', 0, 16, 0.5],
+          ['saturation', 0.5, 2.5, 0.01],
+          ['rimLight', 0, 1, 0.01],
+          ['rimDark', 0, 1, 0.01],
+          ['tint', 0, 0.6, 0.01],
+        ],
+        state: optics,
+        apply: (key, value) => {
+          optics[key] = value;
+          apply();
         },
         exportJson: () => ({ ...optics }),
       });
@@ -1687,7 +1871,7 @@
   }
 
   /* ---------- Render mode switch ---------- */
-  const MODES = ['dom', 'backdrop', 'webgl'];
+  const MODES = ['dom', 'backdrop', 'webgl', 'glasscn'];
   const domSupported = supportsLiquidGlass();
 
   function goToMode(next) {
@@ -1769,6 +1953,13 @@
         console.error('WebGL glass failed, using SVG backdrop glass.', error);
         showNotice('WebGL glass failed to start. Showing SVG backdrop glass.');
       }
+    }
+    if (target === 'glasscn') {
+      await startGlasscn();
+      if (!IS_CHROMIUM) {
+        showNotice('glasscn refract needs a Chromium browser (Chrome, Edge, Arc). This browser shows the panels without glass.');
+      }
+      return 'glasscn';
     }
     await startBackdrop();
     if (!IS_CHROMIUM) {
