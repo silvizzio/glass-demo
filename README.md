@@ -64,7 +64,7 @@ The glass is computed live from the pixels behind each panel. To show this, the 
 | Double-click | Reset the view |
 | + and − | Zoom in steps |
 | Handle on the District IO card | Move the card over the background |
-| No input for 5 seconds | Ambient drift: the map rotates slowly, the render floats. Stops at the first touch. Off with reduced motion. |
+| Page load, and 1.5 seconds after input | Ambient drift: the map rotates slowly, the render floats. It eases in, stops at the first touch, and is off with reduced motion. |
 
 ## Glass tone (index.html)
 
