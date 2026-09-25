@@ -87,6 +87,7 @@
   body[data-bg="map"] .backdrop .render { visibility: hidden; }
   body[data-bg="image"] .backdrop .map { visibility: hidden; }
   body.dragging .backdrop .render, body.drifting .backdrop .render { transition: none; }
+  @property --grip-alpha { syntax: '<number>'; inherits: true; initial-value: 0.5; }
   .backdrop .mapboxgl-ctrl-bottom-right { right: 8px; bottom: 4px; }
 
   /* Input plane for the background: drag to pan, wheel or pinch to zoom, double-click to reset */
@@ -94,6 +95,7 @@
   body.dragging #stage > .pan-plane { cursor: grabbing; }
 
   /* Drag handle on the District IO card */
+  /* The hot state is a body class (not :hover), so the Liquid DOM canvas copy shows it too */
   .grip {
     position: absolute;
     left: 50%;
@@ -104,19 +106,113 @@
     transform: translateX(-50%);
     cursor: grab;
     touch-action: none;
+    outline: none;
   }
-  .grip::before {
+  .grip::after {
     content: "";
     position: absolute;
     left: 50%;
-    top: 8px;
+    top: 3px;
     width: 40px;
-    height: 4px;
+    height: 16px;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0);
     transform: translateX(-50%);
+    transition: background 160ms ease;
   }
-  body.dragging .grip { cursor: grabbing; }
+  .grip::before {
+    /* 3 x 2 dot grip */
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 5px;
+    z-index: 1;
+    width: 18px;
+    height: 12px;
+    transform: translateX(-50%);
+    background-image: radial-gradient(circle at center, rgba(255, 255, 255, var(--grip-alpha, 0.5)) 1.5px, transparent 1.9px);
+    background-size: 6px 6px;
+    transition: --grip-alpha 160ms ease;
+  }
+  body.grip-hot .grip { --grip-alpha: 1; }
+  body.grip-hot .grip::after { background: rgba(255, 255, 255, 0.14); }
+  body.grip-focus .grip::after { box-shadow: 0 0 0 2px var(--white); }
+  .grip-label {
+    position: absolute;
+    left: 50%;
+    top: 22px;
+    padding: 3px 8px;
+    border-radius: 9999px;
+    background: rgba(10, 12, 14, 0.72);
+    color: var(--white);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-shadow: none !important;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -2px);
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+  body:is(.grip-hot, .grip-focus):not(.card-lifted) .grip-label {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition-delay: 400ms;
+  }
+  body.dragging .grip, body.card-lifted .grip { cursor: grabbing; }
+
+  /* Lift while the card moves (not in WebGL mode: a transform there misaligns the glass) */
+  body:is(.bd, .gc) #stage > .panel[data-panel="card"],
+  body:is(.bd) #stage > .lens.card-lens { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease; }
+  body.card-lifted:is(.bd, .gc) #stage > .panel[data-panel="card"] { transform: scale(1.02); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35); }
+  body.card-lifted.bd #stage > .lens.card-lens { transform: scale(1.02); }
+
+  /* First-visit coachmark for the card handle */
+  #coach {
+    position: fixed;
+    z-index: 40;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    max-width: 280px;
+    padding: 10px 10px 10px 14px;
+    border-radius: 14px;
+    background: rgba(10, 12, 14, 0.82);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 12px 32px rgba(0, 0, 0, 0.35);
+    font-size: 13px;
+    line-height: 18px;
+    opacity: 0;
+    transform: translateX(6px);
+    transition: opacity 220ms ease, transform 220ms ease;
+  }
+  #coach.show { display: flex; }
+  #coach.in { opacity: 1; transform: translateX(0); }
+  #coach::after {
+    /* arrow pointing right, at the handle */
+    content: "";
+    position: absolute;
+    right: -6px;
+    top: 18px;
+    width: 12px;
+    height: 12px;
+    background: inherit;
+    transform: rotate(45deg);
+    box-shadow: inset -1px 1px 0 rgba(255, 255, 255, 0.12);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(10, 12, 14, 0.82);
+  }
+  #coach .dots {
+    flex: none;
+    width: 18px;
+    height: 12px;
+    background-image: radial-gradient(circle at center, #fff 1.5px, transparent 1.9px);
+    background-size: 6px 6px;
+  }
+  #coach button { flex: none; padding: 5px 12px; border-radius: 9999px; background: var(--white); color: #000; font-size: 12px; font-weight: 600; }
 
   .backdrop .shadow, body.wg #stage > .shadow.wg-fill {
     position: absolute;
@@ -521,6 +617,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .backdrop .render, .tl-thumb, body:is(.bd, .gc) .press, #stage > .lens { transition: none; }
+    #coach, .grip-label, .grip::after { transition: none; }
   }
 </style>
 </head>
@@ -550,6 +647,12 @@
 <div id="lens-defs" aria-hidden="true"></div>
 
 <div id="tune" aria-label="Glass tuning"></div>
+
+<div id="coach" role="dialog" aria-live="polite" aria-label="Tip">
+  <span class="dots" aria-hidden="true"></span>
+  <span>Drag the card to see the glass bend over the map.</span>
+  <button type="button" data-coach="ok">OK</button>
+</div>
 
 <template id="ui">
   <!-- Backdrop: the render must be inside the scene so the glass can refract it -->
@@ -679,7 +782,7 @@
 
   <!-- District IO detail card -->
   <div class="panel" data-panel="card">
-    <span class="grip" data-drag="card" aria-label="Move card" title="Drag to move"></span>
+    <span class="grip" data-drag="card" role="button" tabindex="0" aria-label="Move card. Drag, or use the arrow keys."><span class="grip-label" aria-hidden="true">Drag to move</span></span>
     <div class="detail">
       <div class="detail-body">
         <div class="detail-head">
@@ -1008,6 +1111,11 @@
     setVisible: () => {},
     movePanel: () => {},
     setTone: () => {},
+    // Lift the card while it moves. Liquid DOM scales the glass; SVG backdrop and glasscn use CSS.
+    liftPanel: (p, on) => {
+      document.body.classList.toggle('card-lifted', on);
+      if (p.glass && document.body.classList.contains('glass')) p.target = on ? 1.02 : 1;
+    },
   };
 
   /* ---------- Stage: DOM copy of the UI, scaled to the viewport ---------- */
@@ -1084,7 +1192,7 @@
     for (const p of PANELS) {
       p.visual = p.el.cloneNode(true);
       p.visual.setAttribute('aria-hidden', 'true');
-      p.visual.querySelectorAll('button').forEach((el) => el.setAttribute('tabindex', '-1'));
+      p.visual.querySelectorAll('button, [tabindex]').forEach((el) => el.setAttribute('tabindex', '-1'));
       const glass = new Glass({
         x: p.x,
         y: p.y,
@@ -1155,7 +1263,7 @@
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       for (const p of PANELS) {
-        if (!p.press || Math.abs(p.target - p.scale) < 0.0005) continue;
+        if (Math.abs(p.target - p.scale) < 0.0005) continue;
         p.scale += (p.target - p.scale) * Math.min(1, dt * 18);
         p.glass.scaleX = p.scale;
         p.glass.scaleY = p.scale;
@@ -1317,6 +1425,7 @@
       box.style.backdropFilter = `url(#${id})`;
       stage.insertBefore(box, PANELS[0].el);
       p.lens = box;
+      if (p.key === 'card') box.classList.add('card-lens');
       lenses.push({ p, lens });
     });
 
@@ -2147,6 +2256,8 @@
     const start = { x: event.clientX, y: event.clientY, px: p.x, py: p.y };
     grip.setPointerCapture(event.pointerId);
     document.body.classList.add('dragging');
+    view.liftPanel(p, true);
+    coach.done();
     const move = (e) => {
       touch();
       p.x = Math.max(0, Math.min(W - p.w, start.px + (e.clientX - start.x) / stageScale));
@@ -2158,6 +2269,7 @@
       grip.removeEventListener('pointerup', up);
       grip.removeEventListener('pointercancel', up);
       document.body.classList.remove('dragging');
+      view.liftPanel(p, false);
     };
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up);
@@ -2165,6 +2277,111 @@
   });
   document.addEventListener('pointerdown', touch, true);
   document.addEventListener('keydown', touch, true);
+
+  // Grip hover and focus: body classes, so every copy of the card shows the state
+  document.addEventListener('pointerover', (event) => {
+    if (event.target.closest?.('#stage [data-drag]')) document.body.classList.add('grip-hot');
+  });
+  document.addEventListener('pointerout', (event) => {
+    const from = event.target.closest?.('#stage [data-drag]');
+    if (from && !from.contains(event.relatedTarget)) document.body.classList.remove('grip-hot');
+  });
+  document.addEventListener('focusin', (event) => {
+    document.body.classList.toggle('grip-focus', Boolean(event.target.closest?.('#stage [data-drag]')) && event.target.matches(':focus-visible'));
+  });
+  document.addEventListener('focusout', () => document.body.classList.remove('grip-focus'));
+  // Keyboard: arrow keys move the card 16 px, Shift for 64 px
+  document.addEventListener('keydown', (event) => {
+    const grip = event.target.closest?.('#stage [data-drag]');
+    if (!grip) return;
+    const step = event.shiftKey ? 64 : 16;
+    const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const p = panel(grip.dataset.drag);
+    p.x = Math.max(0, Math.min(W - p.w, p.x + delta[0]));
+    p.y = Math.max(72, Math.min(H - p.h, p.y + delta[1]));
+    view.movePanel(p);
+    coach.done();
+  }, true);
+
+  /* ---------- First-visit hint for the card handle ---------- */
+  const COACH_KEY = 'dso-glass-card-hint-seen';
+  const coach = {
+    el: document.getElementById('coach'),
+    timer: 0,
+    active: false,
+    seen() {
+      try { return localStorage.getItem(COACH_KEY) === '1'; } catch { return false; }
+    },
+    remember() {
+      try { localStorage.setItem(COACH_KEY, '1'); } catch { /* storage can be blocked */ }
+    },
+    place() {
+      const grip = document.querySelector('#stage [data-drag="card"]');
+      if (!grip) return false;
+      const r = grip.getBoundingClientRect();
+      if (!r.width) return false;
+      const w = this.el.offsetWidth;
+      const cardLeft = panel('card').el.getBoundingClientRect().left;
+      this.el.style.left = `${Math.max(12, cardLeft - w - 14)}px`;
+      this.el.style.top = `${Math.max(12, r.top - 8)}px`;
+      return true;
+    },
+    // Nudge the card left and back twice, so the eye goes to it
+    nudge() {
+      if (reduceMotion) return;
+      const p = panel('card');
+      const baseX = p.x;
+      const t0 = performance.now();
+      const run = (now) => {
+        const t = (now - t0) / 1100;
+        if (t >= 1 || !this.active) {
+          p.x = baseX;
+          view.movePanel(p);
+          return;
+        }
+        p.x = baseX - 12 * Math.sin(t * Math.PI * 2) * Math.sin(t * Math.PI);
+        view.movePanel(p);
+        requestAnimationFrame(run);
+      };
+      requestAnimationFrame(run);
+    },
+    show() {
+      if (MOBILE || !panel('card')?.visible) return;
+      this.active = true;
+      this.el.classList.add('show');
+      if (!this.place()) {
+        this.el.classList.remove('show');
+        this.active = false;
+        return;
+      }
+      void this.el.offsetWidth; // start the fade from the hidden state
+      this.el.classList.add('in');
+      this.nudge();
+      this.timer = setTimeout(() => this.done(), 8000);
+      addEventListener('resize', this.onResize);
+    },
+    onResize: () => coach.place(),
+    done() {
+      if (!this.active) return;
+      this.active = false;
+      clearTimeout(this.timer);
+      removeEventListener('resize', this.onResize);
+      this.remember();
+      this.el.classList.remove('in');
+      setTimeout(() => this.el.classList.remove('show'), 240);
+    },
+    start() {
+      if (MOBILE) return;
+      if (!params.has('hint') && this.seen()) return;
+      setTimeout(() => this.show(), 2000);
+    },
+  };
+  coach.el.addEventListener('click', (event) => {
+    if (event.target.closest('[data-coach="ok"]')) coach.done();
+  });
 
   // Ambient drift after IDLE_MS without input: the map rotates slowly, the render floats
   let driftClock = 0;
@@ -2339,6 +2556,7 @@
   await background.set(params.get('bg') === 'image' ? 'image' : 'map');
   requestAnimationFrame(applyState);
   requestAnimationFrame(driftFrame);
+  coach.start();
 </script>
 </body>
 </html>
