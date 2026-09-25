@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.31.0/mapbox-gl.css" rel="stylesheet">
+<link rel="modulepreload" href="./vendor/liquidglass.js">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -184,13 +185,17 @@
     pointer-events: none;
   }
   body.wg #stage > .panel.is-hidden { display: none; }
-  body.wg #stage > .header { z-index: 3; zoom: var(--wg-s, 1); }
+  body.wg > .header { position: fixed; z-index: 3; zoom: var(--wg-s, 1); }
+  /* The root only holds what the glass samples; input reaches the pan plane under it */
+  body.wg #stage { pointer-events: none; }
+  body.wg #stage > .panel { pointer-events: auto; }
+  body.wg > .pan-plane { position: fixed; z-index: 0; cursor: grab; touch-action: none; }
+  body.wg.dragging > .pan-plane { cursor: grabbing; }
   body.wg #stage > .wg-fill { position: absolute; inset: 0; width: 100%; height: 100%; }
   body.wg #stage > img.wg-fill { object-fit: cover; transform-origin: 50% 50%; transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1); }
   body.wg.dragging #stage > img.wg-fill, body.wg.drifting #stage > img.wg-fill { transition: none; }
   body.wg[data-bg="map"] #stage > img.wg-fill { display: none; }
-  body.wg[data-bg="image"] #stage > canvas.wg-fill { display: none; }
-  body.wg #stage > .pan-plane { z-index: 1; }
+  body.wg[data-bg="image"] #stage > canvas.wg-mirror { display: none; }
   body.wg > .backdrop { position: fixed; inset: 0; width: 100vw; height: 100vh; }
   .wg-attrib { position: fixed; right: 8px; bottom: 4px; z-index: 30; }
   .wg-attrib .mapboxgl-ctrl-bottom-right { position: static; }
@@ -549,7 +554,7 @@
 <template id="ui">
   <!-- Backdrop: the render must be inside the scene so the glass can refract it -->
   <div class="backdrop" data-part="backdrop">
-    <img class="render" src="assets/bg/dso-render.png" alt="Aerial render of Dubai Silicon Oasis">
+    <img class="render" src="assets/bg/dso-render.png" alt="Aerial render of Dubai Silicon Oasis" decoding="async" fetchpriority="low">
     <div class="map" data-ref="map" aria-label="Satellite map of Dubai Silicon Oasis"></div>
     <div class="shadow"></div>
   </div>
@@ -884,6 +889,14 @@
   const MAPBOX_JS = 'https://api.mapbox.com/mapbox-gl-js/v3.31.0/mapbox-gl.js';
   // Token comes from config.js (git-ignored locally, written from MAPBOX_TOKEN on Vercel)
   const MAPBOX_TOKEN = globalThis.GLASS_CONFIG?.mapboxToken || '';
+  // Start the Mapbox download at once when the map is the background (default)
+  if (new URLSearchParams(location.search).get('bg') !== 'image') {
+    const preload = document.createElement('link');
+    preload.rel = 'preload';
+    preload.as = 'script';
+    preload.href = MAPBOX_JS;
+    document.head.append(preload);
+  }
   const MAP_HOME = { center: [55.38111, 25.12417], zoom: 15.6, pitch: 50, bearing: 200 };
   const MAP_ZOOM = { min: 13, max: 19, step: 0.5 };
   // Ambient drift starts at page load. After input it resumes after IDLE_MS and eases in over DRIFT_RAMP_MS.
@@ -1530,7 +1543,19 @@
     const probe = document.createElement('canvas');
     if (!probe.getContext('webgl')) throw new Error('WebGL is not available');
     const { LiquidGlass } = await import(WEBGL_GLASS_URL);
-    await document.fonts.ready;
+
+    // Start-up speed. The library rasterises panel content and non-canvas siblings with
+    // html-to-image, and embeds every webfont for it, before the first glass frame. Here the
+    // panels never overlap (the content captures only serve glass-over-glass compositing), and
+    // every sampled sibling is an <img> or a <canvas> (drawn directly). So these steps are skipped.
+    LiquidGlass.prototype._captureGlassContent = async function skipContentCapture() {};
+    LiquidGlass.prototype._prewarmStaticCaptures = async function skipPrewarm() {};
+    const setupGlass = LiquidGlass.prototype._setupGlassElements;
+    LiquidGlass.prototype._setupGlassElements = function setupWithoutFontEmbed(...args) {
+      this.capture.prefetchFontEmbedCSS = async () => {};
+      return setupGlass.apply(this, args);
+    };
+
     document.body.classList.remove('glass', 'bd');
     document.body.classList.add('wg');
 
@@ -1546,13 +1571,43 @@
     image.classList.add('wg-fill');
     image.removeAttribute('alt');
     const mirror = document.createElement('canvas');
-    mirror.className = 'wg-fill';
-    const shade = backdrop.querySelector('.shadow').cloneNode(true);
-    shade.classList.add('wg-fill');
-    stage.append(image, mirror, shade, panPlane);
+    mirror.className = 'wg-fill wg-mirror';
+    // Figma "shadow" layer (node 1169:9208) drawn on a canvas, so the library draws it directly
+    const shade = document.createElement('canvas');
+    shade.className = 'wg-fill wg-shade';
+    const drawShade = () => {
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      const w = Math.round(innerWidth * dpr);
+      const h = Math.round(innerHeight * dpr);
+      shade.width = w;
+      shade.height = h;
+      const ctx = shade.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+      // radial-gradient(50% 50% at 50% 50%, rgba(5,7,9,0) 0%, rgba(5,7,9,0.2) 48.272%, rgba(5,7,9,0.75) 100%)
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.scale(w / 2, h / 2);
+      const radial = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      radial.addColorStop(0, 'rgba(5, 7, 9, 0)');
+      radial.addColorStop(0.48272, 'rgba(5, 7, 9, 0.2)');
+      radial.addColorStop(1, 'rgba(5, 7, 9, 0.75)');
+      ctx.fillStyle = radial;
+      ctx.fillRect(-1, -1, 2, 2);
+      ctx.restore();
+      // linear-gradient(90deg, rgba(5,7,9,0.5) 0%, rgba(5,7,9,0.3) 25%, rgba(5,7,9,0) 50%), painted on top
+      const linear = ctx.createLinearGradient(0, 0, w, 0);
+      linear.addColorStop(0, 'rgba(5, 7, 9, 0.5)');
+      linear.addColorStop(0.25, 'rgba(5, 7, 9, 0.3)');
+      linear.addColorStop(0.5, 'rgba(5, 7, 9, 0)');
+      linear.addColorStop(1, 'rgba(5, 7, 9, 0)');
+      ctx.fillStyle = linear;
+      ctx.fillRect(0, 0, w, h);
+    };
+    stage.append(image, mirror, shade);
     for (const p of PANELS) stage.append(p.el);
-    stage.append(header);
-    header.style.position = 'absolute';
+    // Header and pan plane stay outside the root: nothing under the glass needs html-to-image
+    document.body.append(panPlane, header);
+    header.style.position = 'fixed';
 
     let scale = 1;
     let ox = 0;
@@ -1592,7 +1647,9 @@
       const dpr = Math.min(2, devicePixelRatio || 1);
       mirror.width = Math.round(innerWidth * dpr);
       mirror.height = Math.round(innerHeight * dpr);
+      drawShade();
       drawMirror();
+      instance?.markChanged(shade);
       applyRenderTransform();
     };
 
@@ -1632,11 +1689,12 @@
     addEventListener('resize', fit);
     fit();
 
-    // The UI is usable while the glass initialises (font embedding and first captures)
+    // The UI is usable while the glass initialises (WebGL setup and the first frame)
     LiquidGlass.init({ root: stage, glassElements: PANELS.map((p) => p.el) })
       .then((ready) => {
         instance = ready;
         instance.markChanged();
+        performance.mark('wg-ready');
       })
       .catch((error) => {
         console.error('WebGL glass failed to initialise.', error);
