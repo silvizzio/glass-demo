@@ -58,6 +58,10 @@
     transform-origin: 0 0;
   }
   #stage > .panel { position: absolute; }
+  /* Glass mode: the canvas draws a copy of the UI; this invisible DOM copy on top takes all input */
+  body.glass #stage { z-index: 1; opacity: 0; }
+  body.glass canvas.glass-canvas { pointer-events: none; }
+  body.glass #stage .panel { background: none; }
 
   /* Backdrop */
   .backdrop { position: relative; width: var(--w); height: var(--h); overflow: hidden; background: #050709; }
@@ -415,14 +419,14 @@
       <div class="assets">
         <div class="section-head"><p class="label-caps inter">Assets</p><span class="rule"></span></div>
         <div class="chips">
-          <button class="chip on" data-action="chip" aria-pressed="true"><span class="mask" style="--m: url(assets/icons/building-2.svg)"></span>Office</button>
-          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/house.svg)"></span>Residential</button>
-          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/hotel.svg)"></span>Commercial</button>
-          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/university.svg)"></span>Education</button>
-          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/store.svg)"></span>Retail</button>
-          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/bus.svg)"></span>Mobility</button>
-          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/factory.svg)"></span>Industrial</button>
-          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/utility-pole.svg)"></span>Utilities</button>
+          <button class="chip on" data-action="chip" data-value="Office" aria-pressed="true"><span class="mask" style="--m: url(assets/icons/building-2.svg)"></span>Office</button>
+          <button class="chip" data-action="chip" data-value="Residential" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/house.svg)"></span>Residential</button>
+          <button class="chip" data-action="chip" data-value="Commercial" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/hotel.svg)"></span>Commercial</button>
+          <button class="chip" data-action="chip" data-value="Education" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/university.svg)"></span>Education</button>
+          <button class="chip" data-action="chip" data-value="Retail" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/store.svg)"></span>Retail</button>
+          <button class="chip" data-action="chip" data-value="Mobility" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/bus.svg)"></span>Mobility</button>
+          <button class="chip" data-action="chip" data-value="Industrial" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/factory.svg)"></span>Industrial</button>
+          <button class="chip" data-action="chip" data-value="Utilities" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/utility-pole.svg)"></span>Utilities</button>
         </div>
       </div>
     </div>
@@ -503,9 +507,9 @@
   </div>
 
   <!-- Map controls -->
-  <div class="panel press" data-panel="ctrl-compare"><button class="ctrl" data-action="toggle" aria-label="Compare"><span class="icon"><img src="assets/icons/clock-fading.svg" alt=""></span></button></div>
-  <div class="panel press" data-panel="ctrl-map"><button class="ctrl" data-action="toggle" aria-label="Base map"><span class="icon"><img src="assets/icons/map.svg" alt=""></span></button></div>
-  <div class="panel press" data-panel="ctrl-pin"><button class="ctrl pin" data-action="toggle" aria-label="Pins"><span class="inner"><span class="icon"><img src="assets/icons/map-pin.svg" alt=""></span></span></button></div>
+  <div class="panel press" data-panel="ctrl-compare"><button class="ctrl" data-action="toggle" data-value="compare" aria-label="Compare"><span class="icon"><img src="assets/icons/clock-fading.svg" alt=""></span></button></div>
+  <div class="panel press" data-panel="ctrl-map"><button class="ctrl" data-action="toggle" data-value="map" aria-label="Base map"><span class="icon"><img src="assets/icons/map.svg" alt=""></span></button></div>
+  <div class="panel press" data-panel="ctrl-pin"><button class="ctrl pin" data-action="toggle" data-value="pin" aria-label="Pins"><span class="inner"><span class="icon"><img src="assets/icons/map-pin.svg" alt=""></span></span></button></div>
   <div class="panel press" data-panel="zoom-in"><button class="ctrl" data-action="zoom" data-value="1" aria-label="Zoom in"><span class="icon"><img src="assets/icons/plus.svg" alt=""></span></button></div>
   <div class="panel press" data-panel="zoom-out"><button class="ctrl" data-action="zoom" data-value="-1" aria-label="Zoom out"><span class="icon"><img src="assets/icons/minus.svg" alt=""></span></button></div>
 
@@ -620,38 +624,50 @@
     setVisible: () => {},
   };
 
-  /* ---------- Fallback: plain DOM with CSS frosted panels ---------- */
-  function startFallback(showNotice) {
-    document.body.classList.add('fallback');
-    if (showNotice) document.body.classList.add('show-notice');
+  /* ---------- Stage: DOM copy of the UI, scaled to the viewport ---------- */
+  // Fallback mode: the stage is the visible UI. Glass mode: the stage is an invisible hit layer on top of the canvas.
+  function mountStage({ withBackdrop }) {
     const stage = document.getElementById('stage');
-    stage.append(backdrop);
-    backdrop.style.position = 'absolute';
+    if (withBackdrop) {
+      stage.append(backdrop);
+      backdrop.style.position = 'absolute';
+    }
     for (const p of PANELS) {
       p.el.style.left = `${p.x}px`;
       p.el.style.top = `${p.y}px`;
       stage.append(p.el);
     }
-    header.style.position = 'absolute';
-    header.style.left = '0';
-    header.style.top = '0';
-    stage.append(header);
-
     const fit = () => {
       const s = Math.min(innerWidth / W, innerHeight / H);
       const ox = (innerWidth - W * s) / 2;
       const oy = (innerHeight - H * s) / 2;
       stage.style.transform = `translate(${ox}px, ${oy}px) scale(${s})`;
-      const bleed = bleedRect(s, ox, oy);
-      backdrop.style.left = `${bleed.x}px`;
-      backdrop.style.top = `${bleed.y}px`;
-      backdrop.style.width = `${bleed.width}px`;
-      backdrop.style.height = `${bleed.height}px`;
+      if (withBackdrop) {
+        const bleed = bleedRect(s, ox, oy);
+        backdrop.style.left = `${bleed.x}px`;
+        backdrop.style.top = `${bleed.y}px`;
+        backdrop.style.width = `${bleed.width}px`;
+        backdrop.style.height = `${bleed.height}px`;
+      }
     };
     addEventListener('resize', fit);
     fit();
+    return stage;
+  }
+
+  /* ---------- Fallback: plain DOM with CSS frosted panels ---------- */
+  function startFallback(showNotice) {
+    document.body.classList.remove('glass');
+    document.body.classList.add('fallback');
+    if (showNotice) document.body.classList.add('show-notice');
+    const stage = mountStage({ withBackdrop: true });
+    header.style.position = 'absolute';
+    header.style.left = '0';
+    header.style.top = '0';
+    stage.append(header);
 
     view.setVisible = (p, visible) => {
+      p.visible = visible;
       p.el.classList.toggle('is-hidden', !visible);
     };
   }
@@ -671,7 +687,11 @@
     const container = new Container({ ...OPTICS, zIndex: 0 });
     root.add(container);
 
+    // The canvas renders a visual copy of each panel. The original stays in the DOM hit layer.
     for (const p of PANELS) {
+      p.visual = p.el.cloneNode(true);
+      p.visual.setAttribute('aria-hidden', 'true');
+      p.visual.querySelectorAll('button').forEach((el) => el.setAttribute('tabindex', '-1'));
       const glass = new Glass({
         x: p.x,
         y: p.y,
@@ -681,7 +701,7 @@
         cornerSmoothing: 0.6,
         origin: { x: p.w / 2, y: p.h / 2 },
       });
-      glass.add(new Html({ width: p.w, height: p.h, element: p.el }));
+      glass.add(new Html({ width: p.w, height: p.h, element: p.visual }));
       container.add(glass);
       p.glass = glass;
     }
@@ -691,6 +711,9 @@
     const renderer = new Renderer({ scene, maxDpr: 2 });
     renderer.canvas.className = 'glass-canvas';
     document.body.prepend(renderer.canvas);
+    document.body.classList.add('glass');
+
+    mountStage({ withBackdrop: false });
 
     const fit = () => {
       const s = Math.min(innerWidth / W, innerHeight / H);
@@ -709,9 +732,9 @@
     addEventListener('resize', fit);
     fit();
 
-    // Press feedback: DOM content inside the canvas still receives pointer events
+    // Press feedback from the hit layer drives the glass scale
     for (const p of PANELS.filter((item) => item.press)) {
-      const down = () => { p.target = 0.94; };
+      const down = () => { if (p.visible) p.target = 0.94; };
       const up = () => { p.target = 1; };
       p.el.addEventListener('pointerdown', down);
       for (const type of ['pointerup', 'pointerleave', 'pointercancel']) p.el.addEventListener(type, up);
@@ -720,6 +743,7 @@
     view.setVisible = (p, visible) => {
       if (p.visible === visible) return;
       p.visible = visible;
+      p.el.style.visibility = visible ? '' : 'hidden';
       if (visible) container.add(p.glass);
       else p.glass.remove();
     };
@@ -806,29 +830,43 @@
     box.append(row);
   }
 
-  /* ---------- Interaction (shared by both modes) ---------- */
-  const ui = { year: 4, zoom: 1 };
+  /* ---------- Interaction: one state, applied to every copy of the UI ---------- */
+  const HERO = 'assets/media/district-io-hero.jpg';
+  const ui = {
+    tab: 'free',
+    year: 4,
+    chips: new Set(['Office']),
+    toggles: new Set(),
+    zoom: 1,
+    hero: HERO,
+  };
+  const all = (selector) => document.querySelectorAll(selector);
 
-  function setYear(index) {
-    ui.year = Math.max(0, Math.min(YEARS.length - 1, index));
-    ref('year').textContent = YEARS[ui.year];
-    ref('state').textContent = ui.year === 0 ? 'NOW' : 'FUTURE';
-    document.querySelectorAll('.tl-label').forEach((el, i) => el.classList.toggle('on', i === ui.year));
-    const dots = ref('dots');
-    const dot = dots.children[ui.year];
-    const width = dots.clientWidth;
-    const center = dot.offsetLeft + dot.offsetWidth / 2;
-    ref('thumb').style.left = `${Math.min(width - 14, center - 7)}px`;
-  }
+  function applyState() {
+    all('.tab').forEach((el) => el.classList.toggle('on', el.dataset.value === ui.tab));
+    all('[data-panel^="tab-"]').forEach((el) => el.classList.toggle('on', el.dataset.panel === `tab-${ui.tab}`));
 
-  function setZoom(delta) {
-    ui.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ui.zoom + delta * ZOOM_STEP));
+    all('[data-ref="year"]').forEach((el) => { el.textContent = YEARS[ui.year]; });
+    all('[data-ref="state"]').forEach((el) => { el.textContent = ui.year === 0 ? 'NOW' : 'FUTURE'; });
+    all('.tl-label').forEach((el) => el.classList.toggle('on', Number(el.dataset.value) === ui.year));
+    all('[data-ref="dots"]').forEach((dots) => {
+      const dot = dots.children[ui.year];
+      const thumb = dots.parentElement.querySelector('[data-ref="thumb"]');
+      const center = dot.offsetLeft + dot.offsetWidth / 2;
+      thumb.style.left = `${Math.min(dots.clientWidth - 14, center - 7)}px`;
+    });
+
+    all('.chip').forEach((el) => {
+      const on = ui.chips.has(el.dataset.value);
+      el.classList.toggle('on', on);
+      el.setAttribute('aria-pressed', String(on));
+    });
+    all('[data-action="toggle"]').forEach((el) => el.classList.toggle('on', ui.toggles.has(el.dataset.value)));
+
+    all('[data-ref="hero"]').forEach((el) => { if (el.getAttribute('src') !== ui.hero) el.src = ui.hero; });
+    all('.thumb').forEach((el) => el.classList.toggle('on', el.dataset.value === ui.hero));
+
     backdrop.querySelector('.render').style.transform = `scale(${ui.zoom})`;
-  }
-
-  function setHero(src) {
-    ref('hero').src = src;
-    document.querySelectorAll('.thumb').forEach((el) => el.classList.toggle('on', el.dataset.value === src));
   }
 
   document.addEventListener('click', (event) => {
@@ -837,34 +875,34 @@
     const { action, value } = target.dataset;
 
     if (action === 'tab') {
-      document.querySelectorAll('.tab').forEach((el) => el.classList.toggle('on', el === target));
-      PANELS.filter((p) => p.key.startsWith('tab-')).forEach((p) => p.el.classList.toggle('on', p.el.contains(target)));
+      ui.tab = value;
     } else if (action === 'year') {
-      setYear(Number(value));
+      ui.year = Number(value);
     } else if (action === 'year-step') {
-      setYear(ui.year + Number(value));
+      ui.year = Math.max(0, Math.min(YEARS.length - 1, ui.year + Number(value)));
     } else if (action === 'chip') {
-      const on = !target.classList.contains('on');
-      target.classList.toggle('on', on);
-      target.setAttribute('aria-pressed', String(on));
+      if (ui.chips.has(value)) ui.chips.delete(value);
+      else ui.chips.add(value);
     } else if (action === 'toggle') {
-      target.classList.toggle('on');
+      if (ui.toggles.has(value)) ui.toggles.delete(value);
+      else ui.toggles.add(value);
     } else if (action === 'zoom') {
-      setZoom(Number(value));
+      ui.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ui.zoom + Number(value) * ZOOM_STEP));
     } else if (action === 'close-card') {
       view.setVisible(panel('card'), false);
     } else if (action === 'open-card') {
       view.setVisible(panel('card'), true);
     } else if (action === 'thumb') {
-      setHero(value);
+      ui.hero = value;
     } else if (action === 'thumb-step') {
-      const thumbs = [...document.querySelectorAll('.thumb')];
-      const current = thumbs.findIndex((el) => el.classList.contains('on'));
-      const next = (current + Number(value) + thumbs.length + 1) % (thumbs.length + 1);
-      setHero(next === thumbs.length ? 'assets/media/district-io-hero.jpg' : thumbs[next].dataset.value);
+      const list = [HERO, ...[...document.querySelectorAll('#stage .thumb')].map((el) => el.dataset.value)];
+      const index = list.indexOf(ui.hero);
+      ui.hero = list[(index + Number(value) + list.length) % list.length];
     } else if (action === 'dismiss-notice') {
       document.body.classList.remove('show-notice');
+      return;
     }
+    applyState();
   });
 
   /* ---------- Boot ---------- */
@@ -879,8 +917,7 @@
   } else {
     startFallback(!forceFallback);
   }
-  panel('tab-free').el.classList.add('on');
-  requestAnimationFrame(() => setYear(ui.year));
+  requestAnimationFrame(applyState);
 </script>
 </body>
 </html>
