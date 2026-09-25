@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DSO Glass Demo</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@700&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --w: 1920px;
+    --h: 1080px;
+    --white: #fff;
+    --white-10: rgba(255, 255, 255, 0.1);
+    --white-20: rgba(255, 255, 255, 0.2);
+    --white-30: rgba(255, 255, 255, 0.3);
+    --white-50: rgba(255, 255, 255, 0.5);
+    --black-10: rgba(0, 0, 0, 0.1);
+    --black-30: rgba(0, 0, 0, 0.3);
+    --black-50: rgba(0, 0, 0, 0.5);
+    --secondary: #f5f5f5;
+    --secondary-fg: #171717;
+    --ts-soft: 0 0 12px rgba(0, 0, 0, 0.15);
+    --ts-drop: 0 4px 4px rgba(0, 0, 0, 0.25);
+    --surface: linear-gradient(180deg, rgba(255, 255, 255, 0.056) 0%, rgba(217, 237, 245, 0.012) 42%, rgba(209, 235, 242, 0.032) 100%), linear-gradient(90deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.12) 100%);
+    --surface-quiet: linear-gradient(180deg, rgba(255, 255, 255, 0.036) 0%, rgba(217, 237, 245, 0.008) 50%, rgba(209, 235, 242, 0.02) 100%), linear-gradient(90deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.15) 100%);
+    --surface-active: linear-gradient(180deg, rgba(255, 255, 255, 0.056) 0%, rgba(217, 237, 245, 0.012) 42%, rgba(209, 235, 242, 0.032) 100%), linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.22) 100%);
+    --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-inter: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-compass: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #050709;
+    color: var(--white);
+    font-family: var(--font);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  p { margin: 0; }
+  img { display: block; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
+  template { display: none; }
+
+  /* Mount points */
+  canvas.glass-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--w);
+    height: var(--h);
+    transform-origin: 0 0;
+  }
+  #stage > .panel { position: absolute; }
+
+  /* Backdrop */
+  .backdrop { position: relative; width: var(--w); height: var(--h); overflow: hidden; background: #050709; }
+  .backdrop .render {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform-origin: 50% 50%;
+    transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .backdrop .shadow {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, rgba(5, 7, 9, 0.5) 0%, rgba(5, 7, 9, 0.3) 25%, rgba(5, 7, 9, 0) 50%),
+      radial-gradient(50% 50% at 50% 50%, rgba(5, 7, 9, 0) 0%, rgba(5, 7, 9, 0.2) 48.272%, rgba(5, 7, 9, 0.75) 100%);
+  }
+
+  /* Panels: glass mode keeps content clear, the glass renders the surface */
+  .panel { position: relative; overflow: hidden; border-radius: 20px; }
+  body.fallback .panel {
+    background: var(--surface);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 8px 24px rgba(0, 0, 0, 0.18);
+  }
+  body.fallback .panel.is-hidden { display: none; }
+  body.fallback .press { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  body.fallback .press:active { transform: scale(0.96); }
+
+  .label-caps {
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 21px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-shadow: var(--ts-soft);
+    white-space: nowrap;
+  }
+  .label-caps.inter { font-family: var(--font-inter); }
+  .section-head { display: flex; gap: 8px; align-items: center; width: 100%; }
+  .section-head .rule { flex: 1 0 0; height: 1px; background: var(--white); }
+  .icon { position: relative; flex-shrink: 0; }
+  .icon > img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
+
+  /* Mode tabs */
+  .tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    border-radius: 20px;
+  }
+  .tab.on { font-weight: 600; background: rgba(0, 0, 0, 0.1); }
+  body.fallback .panel[data-panel^="tab-"] { background: var(--surface-quiet); }
+  body.fallback .panel[data-panel^="tab-"].on { background: var(--surface-active); }
+  body.fallback .tab.on { background: none; }
+
+  /* Timeline */
+  .timeline { display: flex; align-items: center; width: 100%; height: 100%; padding: 12px 16px; gap: 8px; }
+  .tl-step { display: flex; align-items: center; justify-content: center; padding: 8px; background: var(--black-50); flex-shrink: 0; }
+  .tl-step .icon { width: 20px; height: 20px; }
+  .tl-body { flex: 1 0 0; min-width: 1px; display: flex; flex-direction: column; gap: 16px; }
+  .tl-top { display: flex; align-items: center; justify-content: space-between; }
+  .tl-year { font-size: 40px; line-height: 48px; letter-spacing: -1.5px; text-shadow: var(--ts-soft); white-space: nowrap; }
+  .tl-state { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: 16px; line-height: 24px; text-shadow: var(--ts-soft); }
+  .tl-state::before { content: ""; width: 8px; height: 8px; border-radius: 9999px; background: var(--white); }
+  .tl-track { position: relative; padding: 1px 0; }
+  .tl-line { position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); background: var(--white); box-shadow: 0 0 12px rgba(0, 0, 0, 0.15); }
+  .tl-dots { position: relative; display: flex; justify-content: space-between; padding-left: 8px; }
+  .tl-dot { width: 8px; height: 8px; border-radius: 9999px; background: #eff6ff; box-shadow: 0 0 12px rgba(0, 0, 0, 0.15); }
+  .tl-thumb {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    background: var(--white);
+    box-shadow: 0 0 12px 0 var(--white), 0 0 36px 0 #000;
+    transform: translateY(-50%);
+    transition: left 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .tl-labels { display: flex; align-items: center; justify-content: space-between; text-shadow: var(--ts-soft); }
+  .tl-label { flex: 1 0 0; min-width: 1px; font-size: 14px; line-height: 20px; text-align: left; }
+  .tl-label:nth-child(3) { text-align: center; }
+  .tl-label:nth-child(4) { text-align: right; }
+  .tl-label:nth-child(5) { text-align: right; }
+  .tl-label.on { flex: 0 0 52px; font-weight: 600; font-size: 18px; line-height: 27px; }
+
+  /* Assets */
+  .card-pad { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; width: 100%; height: 100%; padding: 24px; }
+  .assets { display: flex; flex-direction: column; gap: 16px; width: 100%; filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.15)); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: 1px solid var(--white-30);
+    border-radius: 9999px;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 20px;
+    text-shadow: var(--ts-drop);
+    white-space: nowrap;
+    color: var(--white);
+  }
+  .chip .mask { width: 12px; height: 12px; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
+  .chip.on { background: var(--white); color: #000; }
+
+  /* Areas of interest */
+  .aoi-list { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  .aoi-row { display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left; }
+  .aoi-badge-icon { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; padding: 6px; border: 1px solid var(--white-20); border-radius: 9999px; flex-shrink: 0; }
+  .aoi-badge-icon .icon { width: 20px; height: 20px; }
+  .aoi-badge-icon .icon > img { position: absolute; width: auto; height: auto; }
+  .aoi-text { flex: 1 0 0; min-width: 1px; display: flex; flex-direction: column; gap: 4px; text-shadow: var(--ts-drop); }
+  .aoi-title-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .aoi-title { font-weight: 500; font-size: 18px; line-height: 27px; }
+  .aoi-status { font-weight: 700; font-size: 14px; line-height: 20px; }
+  .aoi-sub { font-size: 14px; line-height: 20px; }
+  .badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 12px; border-radius: 9999px; font-size: 14px; line-height: 20px; white-space: nowrap; }
+  .badge.outline { background: var(--white-10); border: 1px solid var(--white-50); font-weight: 700; text-shadow: 0 0 4px rgba(0, 0, 0, 0.25); }
+  .badge.solid { background: var(--secondary); color: var(--secondary-fg); font-weight: 500; text-shadow: none; }
+  .badge.tint { background: var(--white-10); font-weight: 700; text-shadow: 0 0 4px rgba(0, 0, 0, 0.25); }
+  .rule-30 { height: 1px; width: 100%; background: var(--white-30); flex-shrink: 0; }
+
+  /* Detail card */
+  .detail { display: flex; flex-direction: column; gap: 8px; width: 100%; height: 100%; padding: 24px; }
+  .detail-body { flex: 1 0 0; min-height: 1px; overflow: hidden; display: flex; flex-direction: column; gap: 24px; }
+  .detail-head { display: flex; align-items: flex-start; justify-content: space-between; }
+  .detail-titles { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+  .detail-title { font-size: 40px; line-height: 48px; letter-spacing: -1.5px; text-shadow: var(--ts-soft); }
+  .close-btn { display: flex; align-items: center; justify-content: center; padding: 12px; border-radius: 9999px; background: var(--surface); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
+  .close-btn .icon { width: 24px; height: 24px; }
+  .rule-full { height: 1px; width: 100%; background: var(--white); flex-shrink: 0; }
+  .media { display: flex; flex-direction: column; gap: 12px; }
+  .hero { width: 100%; aspect-ratio: 160 / 90; border-radius: 4px; object-fit: cover; }
+  .thumbs { display: flex; gap: 8px; align-items: center; }
+  .thumbs-nav { display: flex; align-items: center; justify-content: center; padding: 4px; background: var(--black-30); flex-shrink: 0; }
+  .thumbs-nav.left { border-radius: 4px 0 0 4px; }
+  .thumbs-nav.right { border-radius: 0 4px 4px 0; }
+  .thumbs-nav .icon { width: 24px; height: 24px; }
+  .thumb-row { flex: 1 0 0; min-width: 1px; display: flex; gap: 8px; }
+  .thumb { flex: 1 0 0; min-width: 1px; aspect-ratio: 160 / 90; border-radius: 2px; overflow: hidden; outline: 1px solid transparent; outline-offset: 1px; }
+  .thumb.on { outline-color: var(--white-50); }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .desc {
+    font-size: 16px;
+    line-height: 24px;
+    text-shadow: 0 0 12px #000;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .actions { display: flex; gap: 8px; align-items: center; }
+  .btn { display: flex; align-items: center; justify-content: center; min-height: 36px; padding: 8px 16px; border-radius: 9999px; font-weight: 500; font-size: 14px; line-height: 20px; white-space: nowrap; }
+  .btn.dark { background: var(--black-50); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
+  .btn.light { flex: 1 0 0; background: var(--secondary); color: var(--secondary-fg); }
+
+  /* Map controls */
+  .ctrl { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 20px; }
+  .ctrl .icon { width: 24px; height: 24px; }
+  .ctrl.on { background: rgba(0, 0, 0, 0.14); }
+  .ctrl.pin .inner { display: flex; align-items: center; justify-content: center; padding: 12px; width: 100%; background: var(--black-10); }
+
+  /* KPI band */
+  .band { width: 100%; height: 100%; padding: 24px; }
+  .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 80px; gap: 8px; height: 100%; }
+  .kpi { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 4px 0; text-shadow: var(--ts-soft); }
+  .kpi-value { display: flex; align-items: flex-end; gap: 4px; }
+  .kpi-num { font-weight: 600; font-size: 24px; line-height: 28.8px; letter-spacing: -1px; white-space: nowrap; }
+  .kpi-unit { font-weight: 500; font-size: 14px; line-height: 20px; }
+
+  /* Videos */
+  .videos { display: flex; flex-direction: column; gap: 16px; filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.15)); }
+  .count { font-size: 14px; line-height: 21px; letter-spacing: 1.5px; text-shadow: var(--ts-soft); }
+  .arrows { display: flex; gap: 1px; border-radius: 8px; overflow: hidden; }
+  .arrows button { display: flex; padding: 4px; }
+  .arrows .icon { width: 16px; height: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .tile { position: relative; display: flex; aspect-ratio: 140 / 79; border-radius: 4px; overflow: hidden; box-shadow: 0 0 12px rgba(0, 0, 0, 0.15); }
+  .tile > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .tile::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.6) 100%); }
+  .tile-left { position: relative; z-index: 1; flex: 1 0 0; min-width: 1px; display: flex; align-items: flex-end; padding: 4px; }
+  .tile-title { font-weight: 700; font-size: 10px; line-height: 1.5; text-shadow: var(--ts-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile-right { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; width: 24px; }
+  .tile-right span { display: flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; padding: 4px; }
+  .tile-right .icon { width: 16px; height: 16px; }
+  .tile .play { position: absolute; z-index: 1; left: 50%; top: calc(50% - 0.5px); width: 20px; height: 24px; transform: translate(-50%, -50%); }
+
+  /* Header */
+  .header { position: relative; display: flex; align-items: center; justify-content: space-between; width: var(--w); height: 72px; padding: 16px 24px; }
+  .header > .bar-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .h-left, .h-right { position: relative; display: flex; align-items: center; gap: 16px; width: 678px; }
+  .h-right { justify-content: flex-end; align-self: stretch; }
+  .dso-logo { position: relative; width: 103px; height: 38px; }
+  .dso-logo img { position: absolute; top: -31.58%; bottom: -31.58%; left: 0; right: 0; width: 100%; height: auto; }
+  .compass { position: relative; width: 516px; height: 40px; }
+  .compass .union { position: absolute; left: 0.1%; right: 0.1%; top: 50%; aspect-ratio: 515 / 40; transform: translateY(-50%); }
+  .compass .union img { position: absolute; top: -20%; right: -2.33%; bottom: -30%; left: -1.55%; width: 103.88%; height: 150%; max-width: none; }
+  .mark { position: absolute; top: 3.15px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .mark .tick { display: flex; align-items: center; justify-content: center; width: 0; height: 4px; }
+  .mark .tick > span { position: relative; display: block; width: 4px; height: 0; transform: rotate(90deg); flex: none; }
+  .mark .tick img { position: absolute; top: -0.5px; bottom: -1.5px; left: -12.52%; right: -12.52%; width: 125.04%; height: 2px; max-width: none; }
+  .mark p { font-family: var(--font-compass); font-weight: 700; font-size: 16px; line-height: 1.2; text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.8); white-space: nowrap; }
+  .vsep { width: 1px; align-self: stretch; background: var(--white-50); opacity: 0.5; margin: 0 2px; }
+  .clock { display: flex; flex-direction: column; gap: 2px; text-shadow: var(--ts-soft); white-space: nowrap; }
+  .clock .t { font-weight: 500; font-size: 14px; line-height: 20px; color: #fafafa; }
+  .clock .d { font-size: 12px; line-height: 16px; }
+  .avatar { display: flex; align-items: center; gap: 8px; }
+  .avatar .dot { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9999px; background: var(--secondary); color: #0a0a0a; font-weight: 600; font-size: 14px; line-height: 20px; }
+  .avatar .icon { width: 16px; height: 16px; }
+  .dio-logo { height: 38px; aspect-ratio: 3760 / 2303; object-fit: cover; }
+
+  /* Fallback notice and tuning panel (outside the canvas) */
+  #notice {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100vw - 32px);
+    padding: 10px 12px 10px 16px;
+    border-radius: 9999px;
+    background: rgba(10, 12, 14, 0.78);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    font-size: 13px;
+    line-height: 18px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+  #notice code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  #notice button { padding: 4px 10px; border-radius: 9999px; background: var(--white-10); font-size: 12px; }
+  body.show-notice #notice { display: flex; }
+
+  #tune {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 30;
+    display: none;
+    width: 280px;
+    max-height: calc(100vh - 24px);
+    overflow: auto;
+    padding: 14px;
+    border-radius: 14px;
+    background: rgba(10, 12, 14, 0.9);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    font-size: 12px;
+  }
+  body.show-tune #tune { display: block; }
+  #tune label { display: grid; grid-template-columns: 1fr 52px; gap: 2px 8px; margin-bottom: 10px; }
+  #tune input { grid-column: 1 / -1; width: 100%; }
+  #tune output { text-align: right; font-variant-numeric: tabular-nums; }
+  #tune .row { display: flex; gap: 8px; }
+  #tune .row button { flex: 1; padding: 6px 0; border-radius: 8px; background: var(--white-10); font-size: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .backdrop .render, .tl-thumb, body.fallback .press { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage" aria-label="DSO digital twin demo"></div>
+
+<div id="notice" role="status">
+  <span>Frosted fallback. For liquid glass, use desktop Chrome and enable <code>chrome://flags/#canvas-draw-element</code></span>
+  <button type="button" data-action="dismiss-notice">OK</button>
+</div>
+
+<div id="tune" aria-label="Glass tuning"></div>
+
+<template id="ui">
+  <!-- Backdrop: the render must be inside the scene so the glass can refract it -->
+  <div class="backdrop" data-part="backdrop">
+    <img class="render" src="assets/bg/dso-render.png" alt="Aerial render of Dubai Silicon Oasis">
+    <div class="shadow"></div>
+  </div>
+
+  <!-- Header (no glass) -->
+  <div class="header" data-part="header">
+    <img class="bar-bg" src="assets/bg/header-gradient.png" alt="">
+    <div class="h-left">
+      <div class="dso-logo"><img src="assets/logo/dso.svg" alt="Dubai Silicon Oasis"></div>
+    </div>
+    <div class="compass" aria-hidden="true">
+      <div class="union"><img src="assets/compass/union.svg" alt=""></div>
+      <div class="mark" style="left: 16.33px"><span class="tick"><span><img src="assets/compass/tick.svg" alt=""></span></span><p>W</p><span class="tick"><span><img src="assets/compass/tick.svg" alt=""></span></span></div>
+      <div class="mark" style="left: 117.41px"><span class="tick"><span><img src="assets/compass/tick.svg" alt=""></span></span><p>195</p><span class="tick"><span><img src="assets/compass/tick.svg" alt=""></span></span></div>
+      <div class="mark" style="left: 404.33px"><span class="tick"><span><img src="assets/compass/tick.svg" alt=""></span></span><p>210</p><span class="tick"><span><img src="assets/compass/tick.svg" alt=""></span></span></div>
+    </div>
+    <div class="h-right">
+      <span class="vsep"></span>
+      <div class="clock"><p class="t">13:40:08 AST</p><p class="d">28 MAY 2026</p></div>
+      <span class="vsep"></span>
+      <div class="avatar"><span class="dot">JD</span><span class="icon"><img src="assets/icons/chevron-down.svg" alt=""></span></div>
+      <span class="vsep"></span>
+      <img class="dio-logo" src="assets/logo/district-io.png" alt="District IO">
+    </div>
+  </div>
+
+  <!-- Mode tabs -->
+  <div class="panel press" data-panel="tab-free"><button class="tab on" data-action="tab" data-value="free">Free</button></div>
+  <div class="panel press" data-panel="tab-business"><button class="tab" data-action="tab" data-value="business">Business</button></div>
+  <div class="panel press" data-panel="tab-research"><button class="tab" data-action="tab" data-value="research">Research</button></div>
+
+  <!-- Timeline -->
+  <div class="panel" data-panel="timeline">
+    <div class="timeline">
+      <button class="tl-step" data-action="year-step" data-value="-1" aria-label="Previous year"><span class="icon"><img src="assets/icons/chevron-left-20.svg" alt=""></span></button>
+      <div class="tl-body">
+        <div class="tl-top">
+          <p class="tl-year" data-ref="year">2043</p>
+          <p class="tl-state" data-ref="state">FUTURE</p>
+        </div>
+        <div class="tl-track">
+          <div class="tl-line"></div>
+          <div class="tl-dots" data-ref="dots">
+            <button class="tl-dot" data-action="year" data-value="0" aria-label="2026"></button>
+            <button class="tl-dot" data-action="year" data-value="1" aria-label="2030"></button>
+            <button class="tl-dot" data-action="year" data-value="2" aria-label="2035"></button>
+            <button class="tl-dot" data-action="year" data-value="3" aria-label="2040"></button>
+            <button class="tl-dot" data-action="year" data-value="4" aria-label="2043"></button>
+          </div>
+          <span class="tl-thumb" data-ref="thumb"></span>
+        </div>
+        <div class="tl-labels">
+          <button class="tl-label" data-action="year" data-value="0">2026</button>
+          <button class="tl-label" data-action="year" data-value="1">2030</button>
+          <button class="tl-label" data-action="year" data-value="2">2035</button>
+          <button class="tl-label" data-action="year" data-value="3">2040</button>
+          <button class="tl-label on" data-action="year" data-value="4">2043</button>
+        </div>
+      </div>
+      <button class="tl-step" data-action="year-step" data-value="1" aria-label="Next year"><span class="icon"><img src="assets/icons/chevron-right-20.svg" alt=""></span></button>
+    </div>
+  </div>
+
+  <!-- Assets -->
+  <div class="panel" data-panel="assets">
+    <div class="card-pad">
+      <div class="assets">
+        <div class="section-head"><p class="label-caps inter">Assets</p><span class="rule"></span></div>
+        <div class="chips">
+          <button class="chip on" data-action="chip" aria-pressed="true"><span class="mask" style="--m: url(assets/icons/building-2.svg)"></span>Office</button>
+          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/house.svg)"></span>Residential</button>
+          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/hotel.svg)"></span>Commercial</button>
+          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/university.svg)"></span>Education</button>
+          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/store.svg)"></span>Retail</button>
+          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/bus.svg)"></span>Mobility</button>
+          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/factory.svg)"></span>Industrial</button>
+          <button class="chip" data-action="chip" aria-pressed="false"><span class="mask" style="--m: url(assets/icons/utility-pole.svg)"></span>Utilities</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Areas of interest -->
+  <div class="panel" data-panel="aoi">
+    <div class="card-pad">
+      <div class="section-head"><p class="label-caps">Areas of interest</p><span class="rule"></span></div>
+      <div class="aoi-list">
+        <button class="aoi-row" data-action="open-card">
+          <span class="aoi-badge-icon"><span class="icon"><img src="assets/icons/aoi-construction.svg" alt="" style="top: -50.63%; bottom: -50.63%; left: -54.79%; right: -54.79%; width: 209.58%; height: 201.26%"></span></span>
+          <span class="aoi-text">
+            <span class="aoi-title-wrap"><span class="aoi-title">District IO</span><span class="badge outline">PLANNED 2030</span></span>
+            <span class="aoi-sub">DSO HQ Complex</span>
+          </span>
+        </button>
+        <span class="rule-30"></span>
+        <div class="aoi-row">
+          <span class="aoi-badge-icon"><span class="icon"><img src="assets/icons/aoi-building-2.svg" alt="" style="top: -54.79%; bottom: -54.79%; left: -54.79%; right: -54.79%; width: 209.58%; height: 209.58%"></span></span>
+          <span class="aoi-text">
+            <span class="aoi-title-wrap"><span class="aoi-title">DSO HQ</span><span class="aoi-status">LEASED</span></span>
+            <span class="aoi-sub">Headquarter</span>
+          </span>
+        </div>
+        <span class="rule-30"></span>
+        <div class="aoi-row">
+          <span class="aoi-badge-icon"><span class="icon"><img src="assets/icons/aoi-university.svg" alt="" style="top: -54.79%; bottom: -50.63%; left: -54.79%; right: -54.79%; width: 209.58%; height: 205.42%"></span></span>
+          <span class="aoi-text">
+            <span class="aoi-title-wrap"><span class="aoi-title">TechnoHub 4</span><span class="badge solid">AVAILABLE</span></span>
+            <span class="aoi-sub">Campus offices</span>
+          </span>
+        </div>
+        <span class="rule-30"></span>
+        <div class="aoi-row">
+          <span class="aoi-badge-icon"><span class="icon"><img src="assets/icons/aoi-warehouse.svg" alt="" style="top: -54.79%; bottom: -50.63%; left: -54.79%; right: -54.79%; width: 209.58%; height: 205.42%"></span></span>
+          <span class="aoi-text">
+            <span class="aoi-title-wrap"><span class="aoi-title">LIU 8</span><span class="aoi-status">LEASED</span></span>
+            <span class="aoi-sub">Light Industrial</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- District IO detail card -->
+  <div class="panel" data-panel="card">
+    <div class="detail">
+      <div class="detail-body">
+        <div class="detail-head">
+          <div class="detail-titles">
+            <span class="badge tint">FUTURE</span>
+            <p class="detail-title">District IO</p>
+            <p class="label-caps inter">Planned 2030</p>
+          </div>
+          <button class="close-btn" data-action="close-card" aria-label="Close"><span class="icon"><img src="assets/icons/x.svg" alt=""></span></button>
+        </div>
+        <span class="rule-full"></span>
+        <div class="media">
+          <img class="hero" data-ref="hero" src="assets/media/district-io-hero.jpg" alt="District IO render">
+          <div class="thumbs">
+            <button class="thumbs-nav left" data-action="thumb-step" data-value="-1" aria-label="Previous image"><span class="icon"><img src="assets/icons/chevron-left-24.svg" alt=""></span></button>
+            <div class="thumb-row">
+              <button class="thumb" data-action="thumb" data-value="assets/media/district-io-01.jpg"><img src="assets/media/district-io-01.jpg" alt=""></button>
+              <button class="thumb" data-action="thumb" data-value="assets/media/district-io-02.jpg"><img src="assets/media/district-io-02.jpg" alt=""></button>
+              <button class="thumb" data-action="thumb" data-value="assets/media/district-io-03.jpg"><img src="assets/media/district-io-03.jpg" alt=""></button>
+            </div>
+            <button class="thumbs-nav right" data-action="thumb-step" data-value="1" aria-label="Next image"><span class="icon"><img src="assets/icons/chevron-right-24.svg" alt=""></span></button>
+          </div>
+          <p class="desc">Amalgamation of five plots (164,420 m²) on the DSO masterplan. Concept design by CPG Middle East: commercial offices and techno labs, residential, retail, a 440-key hotel, a convention centre and an iconic museum around a central plaza. Mixed-use plot up to G+40, FAR 4.8.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn dark">Building Info</button>
+        <button class="btn light">Enquire</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map controls -->
+  <div class="panel press" data-panel="ctrl-compare"><button class="ctrl" data-action="toggle" aria-label="Compare"><span class="icon"><img src="assets/icons/clock-fading.svg" alt=""></span></button></div>
+  <div class="panel press" data-panel="ctrl-map"><button class="ctrl" data-action="toggle" aria-label="Base map"><span class="icon"><img src="assets/icons/map.svg" alt=""></span></button></div>
+  <div class="panel press" data-panel="ctrl-pin"><button class="ctrl pin" data-action="toggle" aria-label="Pins"><span class="inner"><span class="icon"><img src="assets/icons/map-pin.svg" alt=""></span></span></button></div>
+  <div class="panel press" data-panel="zoom-in"><button class="ctrl" data-action="zoom" data-value="1" aria-label="Zoom in"><span class="icon"><img src="assets/icons/plus.svg" alt=""></span></button></div>
+  <div class="panel press" data-panel="zoom-out"><button class="ctrl" data-action="zoom" data-value="-1" aria-label="Zoom out"><span class="icon"><img src="assets/icons/minus.svg" alt=""></span></button></div>
+
+  <!-- KPI band -->
+  <div class="panel" data-panel="kpi">
+    <div class="band">
+      <div class="kpis">
+        <div class="kpi"><p class="label-caps">GFA</p><div class="kpi-value"><p class="kpi-num">595,300</p><p class="kpi-unit">m²</p></div></div>
+        <div class="kpi"><p class="label-caps">From</p><div class="kpi-value"><p class="kpi-num">14,900</p><p class="kpi-unit">AED/m²</p></div></div>
+        <div class="kpi"><p class="label-caps">Homes</p><div class="kpi-value"><p class="kpi-num">704</p></div></div>
+        <div class="kpi"><p class="label-caps">Hotel keys</p><div class="kpi-value"><p class="kpi-num">440</p></div></div>
+        <div class="kpi"><p class="label-caps">Levels</p><div class="kpi-value"><p class="kpi-num">G+40</p></div></div>
+        <div class="kpi"><p class="label-caps">Target year</p><div class="kpi-value"><p class="kpi-num">2030</p></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Videos -->
+  <div class="panel" data-panel="videos">
+    <div class="band">
+      <div class="videos">
+        <div class="section-head">
+          <p class="label-caps inter">Videos</p><span class="rule"></span><p class="count">9</p>
+          <div class="arrows">
+            <button aria-label="Previous videos"><span class="icon"><img src="assets/icons/chevron-left-16.svg" alt=""></span></button>
+            <button aria-label="Next videos"><span class="icon"><img src="assets/icons/chevron-right-16.svg" alt=""></span></button>
+          </div>
+        </div>
+        <div class="tiles">
+          <div class="tile"><img src="assets/media/video-01.jpg" alt=""><div class="tile-left"><p class="tile-title">Innovative_Compani...</p></div><div class="tile-right"><span><span class="icon"><img src="assets/icons/expand.svg" alt=""></span></span><span><span class="icon"><img src="assets/icons/pin.svg" alt=""></span></span></div><span class="play icon"><img src="assets/icons/play.svg" alt=""></span></div>
+          <div class="tile"><img src="assets/media/video-02.jpg" alt=""><div class="tile-left"><p class="tile-title">Tech_Events_and_C...</p></div><div class="tile-right"><span><span class="icon"><img src="assets/icons/expand.svg" alt=""></span></span><span><span class="icon"><img src="assets/icons/pin.svg" alt=""></span></span></div><span class="play icon"><img src="assets/icons/play.svg" alt=""></span></div>
+          <div class="tile"><img src="assets/media/video-03.jpg" alt=""><div class="tile-left"><p class="tile-title">Investment_Opport...</p></div><div class="tile-right"><span><span class="icon"><img src="assets/icons/expand.svg" alt=""></span></span><span><span class="icon"><img src="assets/icons/pin.svg" alt=""></span></span></div><span class="play icon"><img src="assets/icons/play.svg" alt=""></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script type="module">
+  const CORE_URL = 'https://esm.sh/@liquid-dom/core@0.1.1';
+  const W = 1920;
+  const H = 1080;
+  const YEARS = ['2026', '2030', '2035', '2040', '2043'];
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 1.6;
+  const ZOOM_STEP = 0.15;
+
+  // Glass optics, starting values. Tune with ?tune and paste the copied JSON here.
+  const OPTICS = {
+    blur: 6,
+    bezelWidth: 22,
+    thickness: 48,
+    displacementFactor: 1,
+    displacementBlur: 6,
+    ior: 1.5,
+    specularStrength: 1,
+    specularOpacity: 0.35,
+    spacing: 6,
+    tint: { r: 0, g: 0, b: 0, a: 0.16 },
+    shadowColor: { r: 0, g: 0, b: 0, a: 0.18 },
+    shadowBlur: 24,
+    shadowOffsetY: 8,
+  };
+
+  // Geometry from Figma frame "UI 5" (node 1137:43652), 1920 x 1080
+  const PANELS = [
+    { key: 'tab-free', x: 32, y: 104, w: 105.333, h: 48, press: true },
+    { key: 'tab-business', x: 147.333, y: 104, w: 105.333, h: 48, press: true },
+    { key: 'tab-research', x: 262.667, y: 104, w: 105.333, h: 48, press: true },
+    { key: 'timeline', x: 32, y: 176, w: 336, h: 141 },
+    { key: 'assets', x: 32, y: 341, w: 336, h: 221 },
+    { key: 'aoi', x: 32, y: 586, w: 336, h: 484 },
+    { key: 'card', x: 1552, y: 104, w: 336, h: 564 },
+    { key: 'ctrl-compare', x: 392, y: 752, w: 56, h: 56, press: true },
+    { key: 'ctrl-map', x: 456, y: 752, w: 56, h: 56, press: true },
+    { key: 'ctrl-pin', x: 520, y: 752, w: 56, h: 56, press: true },
+    { key: 'zoom-in', x: 1768, y: 752, w: 56, h: 56, press: true },
+    { key: 'zoom-out', x: 1832, y: 752, w: 56, h: 56, press: true },
+    { key: 'kpi', x: 392, y: 832, w: 736, h: 216 },
+    { key: 'videos', x: 1152, y: 832, w: 736, h: 216 },
+  ];
+
+  const params = new URLSearchParams(location.search);
+  const tpl = document.getElementById('ui').content;
+  const backdrop = tpl.querySelector('[data-part="backdrop"]');
+  const header = tpl.querySelector('[data-part="header"]');
+  for (const p of PANELS) {
+    p.el = tpl.querySelector(`[data-panel="${p.key}"]`);
+    p.el.style.width = `${p.w}px`;
+    p.el.style.height = `${p.h}px`;
+    p.r = p.r ?? 20;
+    p.scale = 1;
+    p.target = 1;
+    p.visible = true;
+  }
+  const panel = (key) => PANELS.find((p) => p.key === key);
+  const ref = (name) => document.querySelector(`[data-ref="${name}"]`);
+
+  // Backdrop rectangle in design units that covers the full viewport (no letterbox bars)
+  function bleedRect(s, ox, oy) {
+    return { x: -ox / s, y: -oy / s, width: innerWidth / s, height: innerHeight / s };
+  }
+
+  function supportsLiquidGlass() {
+    const queue = globalThis.GPUQueue?.prototype;
+    return Boolean(navigator.gpu) && queue !== undefined && 'copyElementImageToTexture' in queue;
+  }
+
+  // Mode-specific hooks, filled by the active renderer
+  const view = {
+    setVisible: () => {},
+  };
+
+  /* ---------- Fallback: plain DOM with CSS frosted panels ---------- */
+  function startFallback(showNotice) {
+    document.body.classList.add('fallback');
+    if (showNotice) document.body.classList.add('show-notice');
+    const stage = document.getElementById('stage');
+    stage.append(backdrop);
+    backdrop.style.position = 'absolute';
+    for (const p of PANELS) {
+      p.el.style.left = `${p.x}px`;
+      p.el.style.top = `${p.y}px`;
+      stage.append(p.el);
+    }
+    header.style.position = 'absolute';
+    header.style.left = '0';
+    header.style.top = '0';
+    stage.append(header);
+
+    const fit = () => {
+      const s = Math.min(innerWidth / W, innerHeight / H);
+      const ox = (innerWidth - W * s) / 2;
+      const oy = (innerHeight - H * s) / 2;
+      stage.style.transform = `translate(${ox}px, ${oy}px) scale(${s})`;
+      const bleed = bleedRect(s, ox, oy);
+      backdrop.style.left = `${bleed.x}px`;
+      backdrop.style.top = `${bleed.y}px`;
+      backdrop.style.width = `${bleed.width}px`;
+      backdrop.style.height = `${bleed.height}px`;
+    };
+    addEventListener('resize', fit);
+    fit();
+
+    view.setVisible = (p, visible) => {
+      p.el.classList.toggle('is-hidden', !visible);
+    };
+  }
+
+  /* ---------- Liquid glass: liquid-dom scene ---------- */
+  async function startGlass() {
+    const { Scene, Group, Container, Glass, Html, Renderer } = await import(CORE_URL);
+    await document.fonts.ready;
+
+    const scene = new Scene();
+    const root = new Group();
+    scene.add(root);
+
+    const backdropHtml = new Html({ width: W, height: H, zIndex: -1, element: backdrop });
+    root.add(backdropHtml);
+
+    const container = new Container({ ...OPTICS, zIndex: 0 });
+    root.add(container);
+
+    for (const p of PANELS) {
+      const glass = new Glass({
+        x: p.x,
+        y: p.y,
+        width: p.w,
+        height: p.h,
+        cornerRadius: p.r,
+        cornerSmoothing: 0.6,
+        origin: { x: p.w / 2, y: p.h / 2 },
+      });
+      glass.add(new Html({ width: p.w, height: p.h, element: p.el }));
+      container.add(glass);
+      p.glass = glass;
+    }
+
+    root.add(new Html({ width: W, height: 72, zIndex: 1, element: header }));
+
+    const renderer = new Renderer({ scene, maxDpr: 2 });
+    renderer.canvas.className = 'glass-canvas';
+    document.body.prepend(renderer.canvas);
+
+    const fit = () => {
+      const s = Math.min(innerWidth / W, innerHeight / H);
+      root.x = (innerWidth - W * s) / 2;
+      root.y = (innerHeight - H * s) / 2;
+      root.scaleX = s;
+      root.scaleY = s;
+      const bleed = bleedRect(s, root.x, root.y);
+      backdropHtml.x = bleed.x;
+      backdropHtml.y = bleed.y;
+      backdropHtml.width = bleed.width;
+      backdropHtml.height = bleed.height;
+      backdrop.style.width = `${bleed.width}px`;
+      backdrop.style.height = `${bleed.height}px`;
+    };
+    addEventListener('resize', fit);
+    fit();
+
+    // Press feedback: DOM content inside the canvas still receives pointer events
+    for (const p of PANELS.filter((item) => item.press)) {
+      const down = () => { p.target = 0.94; };
+      const up = () => { p.target = 1; };
+      p.el.addEventListener('pointerdown', down);
+      for (const type of ['pointerup', 'pointerleave', 'pointercancel']) p.el.addEventListener(type, up);
+    }
+
+    view.setVisible = (p, visible) => {
+      if (p.visible === visible) return;
+      p.visible = visible;
+      if (visible) container.add(p.glass);
+      else p.glass.remove();
+    };
+
+    let last = performance.now();
+    const frame = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      for (const p of PANELS) {
+        if (!p.press || Math.abs(p.target - p.scale) < 0.0005) continue;
+        p.scale += (p.target - p.scale) * Math.min(1, dt * 18);
+        p.glass.scaleX = p.scale;
+        p.glass.scaleY = p.scale;
+      }
+      try {
+        renderer.render();
+      } catch (error) {
+        console.error(error);
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+
+    if (params.has('tune')) buildTuner(container);
+  }
+
+  /* ---------- Tuning panel (?tune) ---------- */
+  function buildTuner(container) {
+    document.body.classList.add('show-tune');
+    const box = document.getElementById('tune');
+    const controls = [
+      ['blur', 0, 40, 0.5],
+      ['bezelWidth', 0, 80, 1],
+      ['thickness', 0, 200, 1],
+      ['displacementFactor', 0, 3, 0.05],
+      ['displacementBlur', 0, 30, 0.5],
+      ['ior', 1, 2.5, 0.01],
+      ['specularStrength', 0, 3, 0.05],
+      ['specularOpacity', 0, 1, 0.01],
+      ['spacing', 0, 40, 1],
+      ['shadowBlur', 0, 80, 1],
+      ['shadowOffsetY', -20, 40, 1],
+      ['tintAlpha', 0, 0.8, 0.01],
+      ['shadowAlpha', 0, 0.6, 0.01],
+    ];
+    const state = { ...OPTICS, tintAlpha: OPTICS.tint.a, shadowAlpha: OPTICS.shadowColor.a };
+    const apply = (key, value) => {
+      state[key] = value;
+      if (key === 'tintAlpha') container.tint = { ...OPTICS.tint, a: value };
+      else if (key === 'shadowAlpha') container.shadowColor = { ...OPTICS.shadowColor, a: value };
+      else container[key] = value;
+    };
+    for (const [key, min, max, step] of controls) {
+      const label = document.createElement('label');
+      label.innerHTML = `<span>${key}</span><output>${state[key]}</output><input type="range" min="${min}" max="${max}" step="${step}" value="${state[key]}">`;
+      const input = label.querySelector('input');
+      const out = label.querySelector('output');
+      input.addEventListener('input', () => {
+        const value = Number(input.value);
+        out.textContent = value;
+        apply(key, value);
+      });
+      box.append(label);
+    }
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<button type="button" data-t="copy">Copy values</button><button type="button" data-t="hide">Hide</button>';
+    row.addEventListener('click', async (event) => {
+      const action = event.target.dataset.t;
+      if (action === 'hide') document.body.classList.remove('show-tune');
+      if (action === 'copy') {
+        const { tintAlpha, shadowAlpha, ...rest } = state;
+        const json = JSON.stringify({ ...rest, tint: { ...OPTICS.tint, a: tintAlpha }, shadowColor: { ...OPTICS.shadowColor, a: shadowAlpha } }, null, 2);
+        try {
+          await navigator.clipboard.writeText(json);
+          event.target.textContent = 'Copied';
+        } catch {
+          console.log(json);
+          event.target.textContent = 'See console';
+        }
+        setTimeout(() => { event.target.textContent = 'Copy values'; }, 1400);
+      }
+    });
+    box.append(row);
+  }
+
+  /* ---------- Interaction (shared by both modes) ---------- */
+  const ui = { year: 4, zoom: 1 };
+
+  function setYear(index) {
+    ui.year = Math.max(0, Math.min(YEARS.length - 1, index));
+    ref('year').textContent = YEARS[ui.year];
+    ref('state').textContent = ui.year === 0 ? 'NOW' : 'FUTURE';
+    document.querySelectorAll('.tl-label').forEach((el, i) => el.classList.toggle('on', i === ui.year));
+    const dots = ref('dots');
+    const dot = dots.children[ui.year];
+    const width = dots.clientWidth;
+    const center = dot.offsetLeft + dot.offsetWidth / 2;
+    ref('thumb').style.left = `${Math.min(width - 14, center - 7)}px`;
+  }
+
+  function setZoom(delta) {
+    ui.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ui.zoom + delta * ZOOM_STEP));
+    backdrop.querySelector('.render').style.transform = `scale(${ui.zoom})`;
+  }
+
+  function setHero(src) {
+    ref('hero').src = src;
+    document.querySelectorAll('.thumb').forEach((el) => el.classList.toggle('on', el.dataset.value === src));
+  }
+
+  document.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-action]');
+    if (!target) return;
+    const { action, value } = target.dataset;
+
+    if (action === 'tab') {
+      document.querySelectorAll('.tab').forEach((el) => el.classList.toggle('on', el === target));
+      PANELS.filter((p) => p.key.startsWith('tab-')).forEach((p) => p.el.classList.toggle('on', p.el.contains(target)));
+    } else if (action === 'year') {
+      setYear(Number(value));
+    } else if (action === 'year-step') {
+      setYear(ui.year + Number(value));
+    } else if (action === 'chip') {
+      const on = !target.classList.contains('on');
+      target.classList.toggle('on', on);
+      target.setAttribute('aria-pressed', String(on));
+    } else if (action === 'toggle') {
+      target.classList.toggle('on');
+    } else if (action === 'zoom') {
+      setZoom(Number(value));
+    } else if (action === 'close-card') {
+      view.setVisible(panel('card'), false);
+    } else if (action === 'open-card') {
+      view.setVisible(panel('card'), true);
+    } else if (action === 'thumb') {
+      setHero(value);
+    } else if (action === 'thumb-step') {
+      const thumbs = [...document.querySelectorAll('.thumb')];
+      const current = thumbs.findIndex((el) => el.classList.contains('on'));
+      const next = (current + Number(value) + thumbs.length + 1) % (thumbs.length + 1);
+      setHero(next === thumbs.length ? 'assets/media/district-io-hero.jpg' : thumbs[next].dataset.value);
+    } else if (action === 'dismiss-notice') {
+      document.body.classList.remove('show-notice');
+    }
+  });
+
+  /* ---------- Boot ---------- */
+  const forceFallback = params.has('fallback');
+  if (!forceFallback && supportsLiquidGlass()) {
+    try {
+      await startGlass();
+    } catch (error) {
+      console.error('Liquid glass failed, using fallback.', error);
+      startFallback(true);
+    }
+  } else {
+    startFallback(!forceFallback);
+  }
+  panel('tab-free').el.classList.add('on');
+  requestAnimationFrame(() => setYear(ui.year));
+</script>
+</body>
+</html>
