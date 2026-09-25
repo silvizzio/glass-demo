@@ -90,9 +90,28 @@
     backdrop-filter: blur(14px) saturate(140%);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 8px 24px rgba(0, 0, 0, 0.18);
   }
-  body.fallback .panel.is-hidden { display: none; }
-  body.fallback .press { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-  body.fallback .press:active { transform: scale(0.96); }
+  body:is(.fallback, .svg) .panel.is-hidden { display: none; }
+  body:is(.fallback, .svg) .press { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  body:is(.fallback, .svg) .press:active { transform: scale(0.96); }
+
+  /* SVG glass (liquid-glass-web-react): each lens refracts an aligned copy of the render */
+  body.svg .panel {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.056) 0%, rgba(217, 237, 245, 0.012) 42%, rgba(209, 235, 242, 0.032) 100%),
+      linear-gradient(90deg, rgba(0, 0, 0, var(--svg-tint, 0.12)) 0%, rgba(0, 0, 0, var(--svg-tint, 0.12)) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+  #stage > .lens {
+    position: absolute;
+    overflow: hidden;
+    pointer-events: none;
+    transform-origin: 50% 50%;
+    transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  #stage > .lens.pressed { transform: scale(0.96); }
+  #stage > .lens.is-hidden { display: none; }
+  #stage > .lens > .backdrop { position: absolute; }
+  #lens-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 
   .label-caps {
     font-weight: 700;
@@ -123,9 +142,9 @@
     border-radius: 20px;
   }
   .tab.on { font-weight: 600; background: rgba(0, 0, 0, 0.1); }
-  body.fallback .panel[data-panel^="tab-"] { background: var(--surface-quiet); }
-  body.fallback .panel[data-panel^="tab-"].on { background: var(--surface-active); }
-  body.fallback .tab.on { background: none; }
+  body:is(.fallback, .svg) .panel[data-panel^="tab-"] { background: var(--surface-quiet); }
+  body:is(.fallback, .svg) .panel[data-panel^="tab-"].on { background: var(--surface-active); }
+  body:is(.fallback, .svg) .tab.on { background: none; }
 
   /* Timeline */
   .timeline { display: flex; align-items: center; width: 100%; height: 100%; padding: 12px 16px; gap: 8px; }
@@ -309,6 +328,36 @@
   #notice button { padding: 4px 10px; border-radius: 9999px; background: var(--white-10); font-size: 12px; }
   body.show-notice #notice { display: flex; }
 
+  /* Render mode switch: sits in the empty strip between the header and the panels */
+  #modes {
+    position: fixed;
+    z-index: 25;
+    left: 0;
+    top: 0;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9999px;
+    background: rgba(10, 12, 14, 0.55);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    transform-origin: 50% 0;
+  }
+  #modes button {
+    padding: 4px 12px;
+    border-radius: 9999px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.78);
+    white-space: nowrap;
+  }
+  #modes button:hover { color: var(--white); }
+  #modes button.on { background: var(--white); color: #000; }
+  #modes button.na { opacity: 0.45; }
+  #modes kbd { font-family: inherit; opacity: 0.55; margin-right: 4px; }
+
   #tune {
     position: fixed;
     top: 12px;
@@ -332,7 +381,7 @@
   #tune .row button { flex: 1; padding: 6px 0; border-radius: 8px; background: var(--white-10); font-size: 12px; }
 
   @media (prefers-reduced-motion: reduce) {
-    .backdrop .render, .tl-thumb, body.fallback .press { transition: none; }
+    .backdrop .render, .tl-thumb, body:is(.fallback, .svg) .press, #stage > .lens { transition: none; }
   }
 </style>
 </head>
@@ -341,9 +390,17 @@
 <div id="stage" aria-label="DSO digital twin demo"></div>
 
 <div id="notice" role="status">
-  <span>Frosted fallback. For liquid glass, use desktop Chrome and enable <code>chrome://flags/#canvas-draw-element</code></span>
+  <span data-ref="notice-text"></span>
   <button type="button" data-action="dismiss-notice">OK</button>
 </div>
+
+<div id="modes" role="group" aria-label="Glass renderer">
+  <button type="button" data-mode="dom"><kbd>1</kbd>Liquid DOM</button>
+  <button type="button" data-mode="svg"><kbd>2</kbd>SVG glass</button>
+  <button type="button" data-mode="css"><kbd>3</kbd>CSS</button>
+</div>
+
+<div id="lens-defs" aria-hidden="true"></div>
 
 <div id="tune" aria-label="Glass tuning"></div>
 
@@ -575,6 +632,24 @@
     shadowOffsetY: 8,
   };
 
+  // SVG glass (liquid-glass-web-react engine), starting values. Tune with ?tune and paste the copied JSON here.
+  const SVG_GLASS_URL = './vendor/liquid-glass-engine.js';
+  const SVG_OPTICS = {
+    refraction: 22,
+    chromaticAberration: 0.25,
+    blur: 3,
+    depth: 18,
+    curvature: 0.65,
+    splay: 1,
+    glow: 0.12,
+    edgeHighlight: 0.35,
+    edgeWidth: 2,
+    specular: 1,
+    specularAngle: 45,
+    tint: 0.12,
+  };
+  const LENS_MARGIN = 48;
+
   // Geometry from Figma frame "UI 5" (node 1137:43652), 1920 x 1080
   const PANELS = [
     { key: 'tab-free', x: 32, y: 104, w: 105.333, h: 48, press: true },
@@ -626,7 +701,7 @@
 
   /* ---------- Stage: DOM copy of the UI, scaled to the viewport ---------- */
   // Fallback mode: the stage is the visible UI. Glass mode: the stage is an invisible hit layer on top of the canvas.
-  function mountStage({ withBackdrop }) {
+  function mountStage({ withBackdrop, onFit }) {
     const stage = document.getElementById('stage');
     if (withBackdrop) {
       stage.append(backdrop);
@@ -649,22 +724,26 @@
         backdrop.style.width = `${bleed.width}px`;
         backdrop.style.height = `${bleed.height}px`;
       }
+      onFit?.(s, ox, oy);
     };
     addEventListener('resize', fit);
     fit();
     return stage;
   }
 
-  /* ---------- Fallback: plain DOM with CSS frosted panels ---------- */
-  function startFallback(showNotice) {
-    document.body.classList.remove('glass');
-    document.body.classList.add('fallback');
-    if (showNotice) document.body.classList.add('show-notice');
-    const stage = mountStage({ withBackdrop: true });
+  function mountHeader(stage) {
     header.style.position = 'absolute';
     header.style.left = '0';
     header.style.top = '0';
     stage.append(header);
+  }
+
+  /* ---------- Fallback: plain DOM with CSS frosted panels ---------- */
+  function startFallback() {
+    document.body.classList.remove('glass', 'svg');
+    document.body.classList.add('fallback');
+    const stage = mountStage({ withBackdrop: true });
+    mountHeader(stage);
 
     view.setVisible = (p, visible) => {
       p.visible = visible;
@@ -767,35 +846,138 @@
     };
     requestAnimationFrame(frame);
 
-    if (params.has('tune')) buildTuner(container);
+    if (params.has('tune')) buildDomTuner(container);
+  }
+
+  /* ---------- SVG glass: liquid-glass-web-react engine, one lens per panel ---------- */
+  async function startSvg() {
+    const { LiquidGlassEngine } = await import(SVG_GLASS_URL);
+    await document.fonts.ready;
+    document.body.classList.remove('glass', 'fallback');
+    document.body.classList.add('svg');
+    document.body.style.setProperty('--svg-tint', String(SVG_OPTICS.tint));
+
+    const defsRoot = document.getElementById('lens-defs');
+    const stage = document.getElementById('stage');
+    const optics = { ...SVG_OPTICS };
+    let scale = 1;
+
+    // Lens boxes go between the backdrop and the panels. Each box is larger than its panel,
+    // so the refraction can pull pixels from beyond the panel edge.
+    const lenses = [];
+    const buildLenses = () => {
+      for (const p of PANELS) {
+        const box = document.createElement('div');
+        box.className = 'lens';
+        box.style.left = `${p.x - LENS_MARGIN}px`;
+        box.style.top = `${p.y - LENS_MARGIN}px`;
+        box.style.width = `${p.w + LENS_MARGIN * 2}px`;
+        box.style.height = `${p.h + LENS_MARGIN * 2}px`;
+        const copy = backdrop.cloneNode(true);
+        copy.removeAttribute('data-part');
+        copy.setAttribute('aria-hidden', 'true');
+        box.append(copy);
+        stage.insertBefore(box, PANELS[0].el);
+        const defsHost = document.createElement('div');
+        defsRoot.append(defsHost);
+        p.lens = box;
+        p.lensCopy = copy;
+        p.engine = new LiquidGlassEngine({ container: box, filtered: box, defsHost }, engineOptions(p));
+        p.engine.setPosition(0.5, 0.5);
+        lenses.push(p);
+      }
+    };
+
+    // Engine sizes are in screen px, because it measures the filtered box with getBoundingClientRect.
+    function engineOptions(p) {
+      const W = (p.w + LENS_MARGIN * 2) * scale;
+      const H = (p.h + LENS_MARGIN * 2) * scale;
+      const displacement = optics.refraction * scale;
+      return {
+        width: p.w * scale,
+        height: p.h * scale,
+        radius: p.r * scale,
+        strength: (displacement * Math.SQRT2) / Math.sqrt(W * W + H * H),
+        chromaticAberration: optics.chromaticAberration,
+        blur: optics.blur * scale,
+        depth: optics.depth * scale,
+        curvature: optics.curvature,
+        splay: optics.splay,
+        glow: optics.glow,
+        edgeHighlight: optics.edgeHighlight,
+        edgeWidth: optics.edgeWidth * scale,
+        specular: optics.specular,
+        specularAngle: optics.specularAngle,
+      };
+    }
+
+    // Keep each render copy exactly on top of the real backdrop
+    const alignCopies = (s, ox, oy) => {
+      const bleed = bleedRect(s, ox, oy);
+      for (const p of lenses) {
+        p.lensCopy.style.left = `${bleed.x - (p.x - LENS_MARGIN)}px`;
+        p.lensCopy.style.top = `${bleed.y - (p.y - LENS_MARGIN)}px`;
+        p.lensCopy.style.width = `${bleed.width}px`;
+        p.lensCopy.style.height = `${bleed.height}px`;
+      }
+    };
+
+    const onFit = (s, ox, oy) => {
+      scale = s;
+      if (!lenses.length) return;
+      alignCopies(s, ox, oy);
+      for (const p of lenses) p.engine.setOptions(engineOptions(p));
+    };
+
+    mountStage({ withBackdrop: true, onFit });
+    mountHeader(stage);
+    buildLenses();
+    dispatchEvent(new Event('resize'));
+
+    for (const p of PANELS.filter((item) => item.press)) {
+      const down = () => p.lens.classList.add('pressed');
+      const up = () => p.lens.classList.remove('pressed');
+      p.el.addEventListener('pointerdown', down);
+      for (const type of ['pointerup', 'pointerleave', 'pointercancel']) p.el.addEventListener(type, up);
+    }
+
+    view.setVisible = (p, visible) => {
+      p.visible = visible;
+      p.el.classList.toggle('is-hidden', !visible);
+      p.lens.classList.toggle('is-hidden', !visible);
+    };
+
+    if (params.has('tune')) {
+      buildTuner({
+        controls: [
+          ['refraction', 0, 80, 1],
+          ['chromaticAberration', 0, 1, 0.01],
+          ['blur', 0, 16, 0.5],
+          ['depth', 1, 80, 1],
+          ['curvature', 0, 1, 0.01],
+          ['splay', 0, 1, 0.01],
+          ['glow', 0, 1, 0.01],
+          ['edgeHighlight', 0, 1, 0.01],
+          ['edgeWidth', 0, 12, 0.5],
+          ['specular', 0, 2, 0.05],
+          ['specularAngle', 0, 360, 1],
+          ['tint', 0, 0.6, 0.01],
+        ],
+        state: optics,
+        apply: (key, value) => {
+          optics[key] = value;
+          if (key === 'tint') document.body.style.setProperty('--svg-tint', String(value));
+          else for (const p of lenses) p.engine.setOptions(engineOptions(p));
+        },
+        exportJson: () => ({ ...optics }),
+      });
+    }
   }
 
   /* ---------- Tuning panel (?tune) ---------- */
-  function buildTuner(container) {
+  function buildTuner({ controls, state, apply, exportJson }) {
     document.body.classList.add('show-tune');
     const box = document.getElementById('tune');
-    const controls = [
-      ['blur', 0, 40, 0.5],
-      ['bezelWidth', 0, 80, 1],
-      ['thickness', 0, 200, 1],
-      ['displacementFactor', 0, 3, 0.05],
-      ['displacementBlur', 0, 30, 0.5],
-      ['ior', 1, 2.5, 0.01],
-      ['specularStrength', 0, 3, 0.05],
-      ['specularOpacity', 0, 1, 0.01],
-      ['spacing', 0, 40, 1],
-      ['shadowBlur', 0, 80, 1],
-      ['shadowOffsetY', -20, 40, 1],
-      ['tintAlpha', 0, 0.8, 0.01],
-      ['shadowAlpha', 0, 0.6, 0.01],
-    ];
-    const state = { ...OPTICS, tintAlpha: OPTICS.tint.a, shadowAlpha: OPTICS.shadowColor.a };
-    const apply = (key, value) => {
-      state[key] = value;
-      if (key === 'tintAlpha') container.tint = { ...OPTICS.tint, a: value };
-      else if (key === 'shadowAlpha') container.shadowColor = { ...OPTICS.shadowColor, a: value };
-      else container[key] = value;
-    };
     for (const [key, min, max, step] of controls) {
       const label = document.createElement('label');
       label.innerHTML = `<span>${key}</span><output>${state[key]}</output><input type="range" min="${min}" max="${max}" step="${step}" value="${state[key]}">`;
@@ -815,8 +997,7 @@
       const action = event.target.dataset.t;
       if (action === 'hide') document.body.classList.remove('show-tune');
       if (action === 'copy') {
-        const { tintAlpha, shadowAlpha, ...rest } = state;
-        const json = JSON.stringify({ ...rest, tint: { ...OPTICS.tint, a: tintAlpha }, shadowColor: { ...OPTICS.shadowColor, a: shadowAlpha } }, null, 2);
+        const json = JSON.stringify(exportJson(), null, 2);
         try {
           await navigator.clipboard.writeText(json);
           event.target.textContent = 'Copied';
@@ -828,6 +1009,38 @@
       }
     });
     box.append(row);
+  }
+
+  function buildDomTuner(container) {
+    const state = { ...OPTICS, tintAlpha: OPTICS.tint.a, shadowAlpha: OPTICS.shadowColor.a };
+    buildTuner({
+      controls: [
+        ['blur', 0, 40, 0.5],
+        ['bezelWidth', 0, 80, 1],
+        ['thickness', 0, 200, 1],
+        ['displacementFactor', 0, 3, 0.05],
+        ['displacementBlur', 0, 30, 0.5],
+        ['ior', 1, 2.5, 0.01],
+        ['specularStrength', 0, 3, 0.05],
+        ['specularOpacity', 0, 1, 0.01],
+        ['spacing', 0, 40, 1],
+        ['shadowBlur', 0, 80, 1],
+        ['shadowOffsetY', -20, 40, 1],
+        ['tintAlpha', 0, 0.8, 0.01],
+        ['shadowAlpha', 0, 0.6, 0.01],
+      ],
+      state,
+      apply: (key, value) => {
+        state[key] = value;
+        if (key === 'tintAlpha') container.tint = { ...OPTICS.tint, a: value };
+        else if (key === 'shadowAlpha') container.shadowColor = { ...OPTICS.shadowColor, a: value };
+        else container[key] = value;
+      },
+      exportJson: () => {
+        const { tintAlpha, shadowAlpha, ...rest } = state;
+        return { ...rest, tint: { ...OPTICS.tint, a: tintAlpha }, shadowColor: { ...OPTICS.shadowColor, a: shadowAlpha } };
+      },
+    });
   }
 
   /* ---------- Interaction: one state, applied to every copy of the UI ---------- */
@@ -850,10 +1063,13 @@
     all('[data-ref="state"]').forEach((el) => { el.textContent = ui.year === 0 ? 'NOW' : 'FUTURE'; });
     all('.tl-label').forEach((el) => el.classList.toggle('on', Number(el.dataset.value) === ui.year));
     all('[data-ref="dots"]').forEach((dots) => {
-      const dot = dots.children[ui.year];
-      const thumb = dots.parentElement.querySelector('[data-ref="thumb"]');
-      const center = dot.offsetLeft + dot.offsetWidth / 2;
-      thumb.style.left = `${Math.min(dots.clientWidth - 14, center - 7)}px`;
+      const track = dots.parentElement;
+      const thumb = track.querySelector('[data-ref="thumb"]');
+      const trackRect = track.getBoundingClientRect();
+      const dotRect = dots.children[ui.year].getBoundingClientRect();
+      const k = trackRect.width / (track.offsetWidth || 1) || 1;
+      const center = (dotRect.left + dotRect.width / 2 - trackRect.left) / k;
+      thumb.style.left = `${Math.min(track.offsetWidth - 14, center - 7)}px`;
     });
 
     all('.chip').forEach((el) => {
@@ -866,7 +1082,7 @@
     all('[data-ref="hero"]').forEach((el) => { if (el.getAttribute('src') !== ui.hero) el.src = ui.hero; });
     all('.thumb').forEach((el) => el.classList.toggle('on', el.dataset.value === ui.hero));
 
-    backdrop.querySelector('.render').style.transform = `scale(${ui.zoom})`;
+    all('.backdrop .render').forEach((el) => { el.style.transform = `scale(${ui.zoom})`; });
   }
 
   document.addEventListener('click', (event) => {
@@ -905,18 +1121,87 @@
     applyState();
   });
 
-  /* ---------- Boot ---------- */
-  const forceFallback = params.has('fallback');
-  if (!forceFallback && supportsLiquidGlass()) {
-    try {
-      await startGlass();
-    } catch (error) {
-      console.error('Liquid glass failed, using fallback.', error);
-      startFallback(true);
-    }
-  } else {
-    startFallback(!forceFallback);
+  /* ---------- Render mode switch ---------- */
+  const MODES = ['dom', 'svg', 'css'];
+  const domSupported = supportsLiquidGlass();
+
+  function goToMode(next) {
+    const url = new URL(location.href);
+    url.searchParams.set('glass', next);
+    url.searchParams.delete('fallback');
+    location.href = url.toString();
   }
+
+  function showNotice(html) {
+    document.querySelector('[data-ref="notice-text"]').innerHTML = html;
+    document.body.classList.add('show-notice');
+  }
+
+  function setupModeSwitch(active) {
+    const bar = document.getElementById('modes');
+    bar.querySelectorAll('button').forEach((el) => {
+      el.classList.toggle('on', el.dataset.mode === active);
+      el.setAttribute('aria-pressed', String(el.dataset.mode === active));
+      if (el.dataset.mode === 'dom' && !domSupported) {
+        el.classList.add('na');
+        el.title = 'Needs desktop Chrome with chrome://flags/#canvas-draw-element enabled';
+      }
+      el.addEventListener('click', () => { if (el.dataset.mode !== active) goToMode(el.dataset.mode); });
+    });
+    addEventListener('keydown', (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest?.('input, textarea')) return;
+      const next = MODES[Number(event.key) - 1];
+      if (next && next !== active) goToMode(next);
+    });
+    // Center the switch in the strip between the header (y 72) and the panels (y 104)
+    const place = () => {
+      const s = Math.min(innerWidth / W, innerHeight / H);
+      const ox = (innerWidth - W * s) / 2;
+      const oy = (innerHeight - H * s) / 2;
+      const k = Math.max(0.75, s);
+      bar.style.transform = `translate(${ox + (W * s) / 2 - (bar.offsetWidth * k) / 2}px, ${oy + 76 * s}px) scale(${k})`;
+      bar.style.transformOrigin = '0 0';
+    };
+    addEventListener('resize', place);
+    place();
+  }
+
+  /* ---------- Boot ---------- */
+  const requested = params.get('glass') ?? (params.has('fallback') ? 'css' : null);
+  let mode = MODES.includes(requested) ? requested : (domSupported ? 'dom' : 'svg');
+  if (mode === 'dom' && !domSupported) {
+    mode = 'svg';
+    if (requested === 'dom') {
+      showNotice('Liquid DOM needs desktop Chrome with <code>chrome://flags/#canvas-draw-element</code> enabled. Showing SVG glass.');
+    }
+  }
+
+  async function boot(target) {
+    if (target === 'dom') {
+      try {
+        await startGlass();
+        return 'dom';
+      } catch (error) {
+        console.error('Liquid DOM failed, using SVG glass.', error);
+        showNotice('Liquid DOM failed to start. Showing SVG glass.');
+        return boot('svg');
+      }
+    }
+    if (target === 'svg') {
+      try {
+        await startSvg();
+        return 'svg';
+      } catch (error) {
+        console.error('SVG glass failed, using CSS.', error);
+        showNotice('SVG glass failed to start. Showing the CSS version.');
+      }
+    }
+    startFallback();
+    return 'css';
+  }
+
+  const activeMode = await boot(mode);
+  setupModeSwitch(activeMode);
   requestAnimationFrame(applyState);
 </script>
 </body>

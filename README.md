@@ -33,3 +33,17 @@ npm run build
 ## Library for index.html
 
 `vendor/liquid-dom-core.js` is `@liquid-dom/core` built from GitHub master (commit dd342ab). The single-file prototype `index.html` loads it. Do not replace it with the npm release 0.1.1: that release uses the old Chrome copy API, and all panels render empty.
+
+## Render modes (index.html)
+
+The single-file demo has three renderers for the same UI. Use the switch at top center, the keys `1`, `2`, `3`, or `?glass=` in the URL.
+
+| Mode | URL | Library | Browsers |
+| --- | --- | --- | --- |
+| Liquid DOM | `?glass=dom` | [liquid-dom](https://github.com/AndrewPrifer/liquid-dom), WebGPU | Desktop Chrome with `chrome://flags/#canvas-draw-element` enabled |
+| SVG glass | `?glass=svg` | [liquid-glass-web-react](https://github.com/PallavAg/liquid-glass-web-react) engine, SVG `feDisplacementMap` | Chrome, Safari, Firefox, desktop and mobile |
+| CSS | `?glass=css` | None, CSS `backdrop-filter` | All |
+
+Default: Liquid DOM when the browser supports it, else SVG glass. Add `?tune` for optics sliders of the active mode.
+
+`vendor/liquid-glass-engine.js` is the plain-DOM engine of liquid-glass-web-react (commit 8c61545), built without React.
