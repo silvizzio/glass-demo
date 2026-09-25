@@ -78,3 +78,16 @@ Every mode has a dark base (default) and a light base. Use **Dark | Light** in t
 | glasscn | black fill 28%, rim light 0.18, rim dark 0.35 | white fill 8%, rim light 0.35, rim dark 0.15 |
 
 The presets are in `TONE_PRESETS` in `index.html`. With `?tune`, the sliders edit the active tone, and "Copy values" includes the tone name.
+
+## Responsive layout (index.html)
+
+The page has two layouts for the same UI, state and render modes.
+
+| Layout | When | Frame |
+| --- | --- | --- |
+| Desktop | Viewport 768 px or wider, and landscape | Figma 1920 x 1080, scaled to fit |
+| Portrait | Viewport narrower than 768 px, or taller than wide | 430 px wide, height follows the screen |
+
+Portrait layout: header (logo, avatar), tabs with a settings button (render mode, Map or Image, Dark or Light), full-width timeline, map controls above a bottom sheet with five sections (District IO, Assets, Areas, KPIs, Videos). Content scrolls inside the sheet. Safe-area insets are applied for the notch and the home bar. Touch: drag, pinch, double-tap to reset.
+
+On iPhone every browser is WebKit, so only WebGL glass refracts; the other modes are shown disabled. Force a layout with `?layout=desktop` or `?layout=mobile`.

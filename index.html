@@ -36,7 +36,12 @@
   }
 
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+  html { touch-action: manipulation; -webkit-text-size-adjust: 100%; overflow: hidden; }
+  /* A fixed, clipped body keeps the 1920 or 430 px stage from widening the mobile layout viewport */
+  body { position: fixed; inset: 0; width: 100%; height: 100%; }
+  #safe-probe { position: fixed; top: 0; left: 0; width: 0; height: 0; visibility: hidden; pointer-events: none;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
   body {
     background: #050709;
     color: var(--white);
@@ -443,6 +448,9 @@
   #modes button.na { opacity: 0.45; }
   #modes kbd { font-family: inherit; opacity: 0.55; margin-right: 4px; }
   #modes .sep { width: 1px; margin: 4px 4px; background: rgba(255, 255, 255, 0.2); }
+  /* Portrait: Mapbox logo and attribution sit in the visible map area, not under the bottom sheet */
+  body.mobile .backdrop .mapboxgl-ctrl-bottom-right { top: 38%; bottom: auto; }
+  body.mobile .wg-attrib { top: 38%; bottom: auto; }
 
   #tune {
     position: fixed;
@@ -466,6 +474,46 @@
   #tune .row { display: flex; gap: 8px; }
   #tune .row button { flex: 1; padding: 6px 0; border-radius: 8px; background: var(--white-10); font-size: 12px; }
 
+  /* ---------- Portrait layout (phones): 430 px wide design frame, height follows the screen ---------- */
+  body.mobile { --w: 430px; }
+  body.mobile .header { height: 56px; padding: 8px 16px; }
+  body.mobile .header .compass, body.mobile .header .clock, body.mobile .header .vsep, body.mobile .header .dio-logo { display: none; }
+  body.mobile .h-left, body.mobile .h-right { width: auto; }
+  body.mobile .grip { display: none; }
+  body.mobile .tab { font-size: 15px; }
+  body.mobile .timeline { padding: 12px 8px; }
+  body.mobile .card-pad { justify-content: flex-start; overflow-y: auto; padding: 16px; }
+  body.mobile .detail { display: block; overflow-y: auto; padding: 16px; }
+  body.mobile .detail-body { overflow: visible; }
+  body.mobile .detail .actions { margin-top: 16px; }
+  body.mobile .desc { display: block; -webkit-line-clamp: unset; overflow: visible; }
+  body.mobile .band { padding: 16px; overflow-y: auto; }
+  body.mobile .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 72px; height: auto; }
+  body.mobile .tiles { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 72%; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+  body.mobile .tile { scroll-snap-align: start; }
+  body.mobile .ctrl .icon { width: 22px; height: 22px; }
+
+  /* Bottom sheet segments */
+  .seg { display: flex; gap: 4px; width: 100%; height: 100%; padding: 4px; }
+  .seg button {
+    flex: 1 1 0;
+    min-width: 0;
+    border-radius: 16px;
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-shadow: var(--ts-soft);
+  }
+  .seg button.on { background: var(--white); color: #000; text-shadow: none; }
+
+  /* Settings sheet: the mode, background and tone switch */
+  body.mobile #modes { display: none; flex-wrap: wrap; justify-content: center; row-gap: 4px; border-radius: 20px; padding: 6px; }
+  body.mobile.show-modes #modes { display: flex; }
+  body.mobile #modes button { font-size: 13px; line-height: 18px; padding: 7px 12px; }
+  body.mobile #modes .sep, body.mobile #modes kbd { display: none; }
+  #modes button:disabled { opacity: 0.35; cursor: not-allowed; }
+
   @media (prefers-reduced-motion: reduce) {
     .backdrop .render, .tl-thumb, body:is(.bd, .gc) .press, #stage > .lens { transition: none; }
   }
@@ -474,6 +522,7 @@
 <body>
 
 <div id="stage" aria-label="DSO digital twin demo"></div>
+<div id="safe-probe" aria-hidden="true"></div>
 
 <div id="notice" role="status">
   <span data-ref="notice-text"></span>
@@ -658,6 +707,18 @@
     </div>
   </div>
 
+  <!-- Portrait layout only: settings button and bottom sheet segments -->
+  <div class="panel press" data-panel="settings"><button class="ctrl" data-action="settings" aria-label="Display settings" aria-expanded="false"><span class="icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span></button></div>
+  <div class="panel" data-panel="sheet-tabs">
+    <div class="seg" role="tablist" aria-label="Sections">
+      <button role="tab" data-action="section" data-value="card">District IO</button>
+      <button role="tab" data-action="section" data-value="assets">Assets</button>
+      <button role="tab" data-action="section" data-value="aoi">Areas</button>
+      <button role="tab" data-action="section" data-value="kpi">KPIs</button>
+      <button role="tab" data-action="section" data-value="videos">Videos</button>
+    </div>
+  </div>
+
   <!-- Map controls -->
   <div class="panel press" data-panel="ctrl-compare"><button class="ctrl" data-action="toggle" data-value="compare" aria-label="Compare"><span class="icon"><img src="assets/icons/clock-fading.svg" alt=""></span></button></div>
   <div class="panel press" data-panel="ctrl-map"><button class="ctrl" data-action="toggle" data-value="map" aria-label="Base map"><span class="icon"><img src="assets/icons/map.svg" alt=""></span></button></div>
@@ -704,8 +765,14 @@
 <script type="module">
   // liquid-dom core, built from GitHub master. The npm release 0.1.1 uses the old Chrome copy API and renders empty content.
   const CORE_URL = './vendor/liquid-dom-core.js';
-  const W = 1920;
-  const H = 1080;
+  // Design frame. Desktop: the Figma 1920 x 1080 frame. Portrait: 430 px wide, height follows the screen.
+  const LAYOUT_PARAM = new URLSearchParams(location.search).get('layout');
+  const isPortraitViewport = () => innerWidth < 768 || innerHeight > innerWidth;
+  const MOBILE = LAYOUT_PARAM === 'mobile' || (LAYOUT_PARAM !== 'desktop' && isPortraitViewport());
+  let W = MOBILE ? 430 : 1920;
+  let H = MOBILE ? Math.round(innerHeight / (innerWidth / 430)) : 1080;
+  if (MOBILE) document.body.classList.add('mobile');
+  const SECTIONS = ['card', 'assets', 'aoi', 'kpi', 'videos'];
   const YEARS = ['2026', '2030', '2035', '2040', '2043'];
   const ZOOM_MIN = 1;
   const ZOOM_MAX = 1.6;
@@ -823,7 +890,7 @@
   const DRIFT = { mapDegPerSec: 2.5, imagePan: 28, imageZoom: 0.05, imagePeriod: 24 };
 
   // Geometry from Figma frame "UI 5" (node 1137:43652), 1920 x 1080
-  const PANELS = [
+  const DESKTOP_PANELS = [
     { key: 'tab-free', x: 32, y: 104, w: 105.333, h: 48, press: true },
     { key: 'tab-business', x: 147.333, y: 104, w: 105.333, h: 48, press: true },
     { key: 'tab-research', x: 262.667, y: 104, w: 105.333, h: 48, press: true },
@@ -840,6 +907,46 @@
     { key: 'videos', x: 1152, y: 832, w: 736, h: 216 },
   ];
 
+  // Portrait geometry, 430 px wide. top: offset from the top safe area. bottom: offset from the bottom safe area
+  // to the panel's top edge. The five sections share the bottom sheet; one is visible at a time.
+  const SHEET_H = 300;
+  const MOBILE_PANELS = [
+    { key: 'tab-free', x: 16, top: 64, w: 110, h: 44, press: true },
+    { key: 'tab-business', x: 134, top: 64, w: 110, h: 44, press: true },
+    { key: 'tab-research', x: 252, top: 64, w: 110, h: 44, press: true },
+    { key: 'settings', x: 370, top: 64, w: 44, h: 44, press: true },
+    { key: 'timeline', x: 16, top: 116, w: 398, h: 141 },
+    { key: 'ctrl-compare', x: 16, bottom: 16 + SHEET_H + 48 + 52, w: 44, h: 44, press: true },
+    { key: 'ctrl-map', x: 68, bottom: 16 + SHEET_H + 48 + 52, w: 44, h: 44, press: true },
+    { key: 'ctrl-pin', x: 120, bottom: 16 + SHEET_H + 48 + 52, w: 44, h: 44, press: true },
+    { key: 'zoom-in', x: 318, bottom: 16 + SHEET_H + 48 + 52, w: 44, h: 44, press: true },
+    { key: 'zoom-out', x: 370, bottom: 16 + SHEET_H + 48 + 52, w: 44, h: 44, press: true },
+    { key: 'sheet-tabs', x: 16, bottom: 16 + SHEET_H + 48, w: 398, h: 40 },
+    ...SECTIONS.map((key) => ({ key, x: 16, bottom: 16 + SHEET_H, w: 398, h: SHEET_H })),
+  ];
+  const PANELS = MOBILE ? MOBILE_PANELS : DESKTOP_PANELS;
+
+  // Safe-area insets (notch, home bar) in design px
+  const safe = { top: 0, bottom: 0 };
+  function readSafeArea() {
+    const probe = document.getElementById('safe-probe');
+    const cs = getComputedStyle(probe);
+    const k = MOBILE ? innerWidth / W : 1;
+    safe.top = (parseFloat(cs.paddingTop) || 0) / k;
+    safe.bottom = (parseFloat(cs.paddingBottom) || 0) / k;
+  }
+
+  // Portrait: frame height and panel positions follow the viewport (address bar, rotation within portrait)
+  function layoutPortrait() {
+    if (!MOBILE) return;
+    H = Math.round(innerHeight / (innerWidth / W));
+    readSafeArea();
+    for (const p of PANELS) {
+      p.y = p.top !== undefined ? safe.top + p.top : H - safe.bottom - p.bottom;
+    }
+  }
+  layoutPortrait();
+
   const params = new URLSearchParams(location.search);
   const tpl = document.getElementById('ui').content;
   const backdrop = tpl.querySelector('[data-part="backdrop"]');
@@ -854,6 +961,21 @@
     p.visible = true;
   }
   const panel = (key) => PANELS.find((p) => p.key === key);
+
+  // Reload when the viewport crosses between portrait and desktop layouts; otherwise re-flow the portrait layout
+  let layoutTimer = 0;
+  addEventListener('resize', () => {
+    if (!LAYOUT_PARAM && isPortraitViewport() !== MOBILE) {
+      clearTimeout(layoutTimer);
+      layoutTimer = setTimeout(() => location.reload(), 250);
+      return;
+    }
+    if (!MOBILE) return;
+    layoutPortrait();
+    for (const p of PANELS) view.movePanel(p);
+    header.style.top = `${safe.top}px`;
+    view.onLayout?.();
+  });
   const ref = (name) => document.querySelector(`[data-ref="${name}"]`);
 
   // Backdrop rectangle in design units that covers the full viewport (no letterbox bars)
@@ -922,7 +1044,7 @@
   function mountHeader(stage) {
     header.style.position = 'absolute';
     header.style.left = '0';
-    header.style.top = '0';
+    header.style.top = `${safe.top}px`;
     stage.append(header);
   }
 
@@ -962,7 +1084,9 @@
       p.glass = glass;
     }
 
-    root.add(new Html({ width: W, height: 72, zIndex: 1, element: header }));
+    const headerHtml = new Html({ y: safe.top, width: W, height: MOBILE ? 56 : 72, zIndex: 1, element: header });
+    root.add(headerHtml);
+    view.onLayout = () => { headerHtml.y = safe.top; };
 
     const renderer = new Renderer({ scene, maxDpr: 2 });
     renderer.canvas.className = 'glass-canvas';
@@ -1458,7 +1582,7 @@
       panPlane.style.width = `${innerWidth}px`;
       panPlane.style.height = `${innerHeight}px`;
       header.style.left = `${ox / scale}px`;
-      header.style.top = `${oy / scale}px`;
+      header.style.top = `${oy / scale + safe.top}px`;
       for (const p of PANELS) {
         layoutPanel(p);
         p.el.dataset.config = configFor(p);
@@ -1648,6 +1772,7 @@
     toggles: new Set(),
     zoom: 1,
     hero: HERO,
+    section: 'card',
   };
   const all = (selector) => document.querySelectorAll(selector);
 
@@ -1679,6 +1804,17 @@
     all('.thumb').forEach((el) => el.classList.toggle('on', el.dataset.value === ui.hero));
 
     applyRenderTransform();
+
+    if (MOBILE) {
+      all('[data-action="section"]').forEach((el) => {
+        el.classList.toggle('on', el.dataset.value === ui.section);
+        el.setAttribute('aria-selected', String(el.dataset.value === ui.section));
+      });
+      for (const key of SECTIONS) {
+        const p = panel(key);
+        if (p) view.setVisible(p, key === ui.section);
+      }
+    }
   }
 
   document.addEventListener('click', (event) => {
@@ -1701,9 +1837,18 @@
     } else if (action === 'zoom') {
       background.zoomBy(Number(value));
     } else if (action === 'close-card') {
-      view.setVisible(panel('card'), false);
+      if (MOBILE) ui.section = 'aoi';
+      else view.setVisible(panel('card'), false);
     } else if (action === 'open-card') {
-      view.setVisible(panel('card'), true);
+      if (MOBILE) ui.section = 'card';
+      else view.setVisible(panel('card'), true);
+    } else if (action === 'section') {
+      ui.section = value;
+    } else if (action === 'settings') {
+      const open = document.body.classList.toggle('show-modes');
+      all('[data-action="settings"]').forEach((el) => el.setAttribute('aria-expanded', String(open)));
+      dispatchEvent(new Event('modes:place'));
+      return;
     } else if (action === 'thumb') {
       ui.hero = value;
     } else if (action === 'thumb-step') {
@@ -1901,6 +2046,20 @@
       pinchDistance = distance;
     }
   });
+  let lastTap = 0;
+  let tapStart = null;
+  panPlane.addEventListener('pointerdown', (event) => { tapStart = { x: event.clientX, y: event.clientY }; });
+  panPlane.addEventListener('pointerup', (event) => {
+    if (event.pointerType !== 'touch' || !tapStart) return;
+    if (Math.hypot(event.clientX - tapStart.x, event.clientY - tapStart.y) > 10) return;
+    const now = performance.now();
+    if (now - lastTap < 320) {
+      background.reset();
+      lastTap = 0;
+    } else {
+      lastTap = now;
+    }
+  });
   const release = (event) => {
     pointers.delete(event.pointerId);
     if (pointers.size < 2) pinchDistance = 0;
@@ -2024,6 +2183,12 @@
         el.classList.add('na');
         el.title = 'Needs desktop Chrome with chrome://flags/#canvas-draw-element enabled';
       }
+      // Every iPhone browser is WebKit: only WebGL glass can refract there
+      if (IS_IOS && el.dataset.mode !== 'webgl') {
+        el.disabled = true;
+        el.title = 'Needs desktop Chrome';
+        el.setAttribute('aria-label', `${el.textContent.trim()}, needs desktop Chrome`);
+      }
       el.addEventListener('click', () => { if (el.dataset.mode !== active) goToMode(el.dataset.mode); });
     });
     addEventListener('keydown', (event) => {
@@ -2041,11 +2206,18 @@
       const s = Math.min(innerWidth / W, innerHeight / H);
       const ox = (innerWidth - W * s) / 2;
       const oy = (innerHeight - H * s) / 2;
+      bar.style.transformOrigin = '0 0';
+      if (MOBILE) {
+        // Settings sheet: below the tabs row, over the timeline
+        bar.style.maxWidth = `${innerWidth - 24}px`;
+        bar.style.transform = `translate(${(innerWidth - bar.offsetWidth) / 2}px, ${oy + (safe.top + 116) * s}px)`;
+        return;
+      }
       const k = Math.max(0.75, s);
       bar.style.transform = `translate(${ox + (W * s) / 2 - (bar.offsetWidth * k) / 2}px, ${oy + 76 * s}px) scale(${k})`;
-      bar.style.transformOrigin = '0 0';
     };
     addEventListener('resize', place);
+    addEventListener('modes:place', place);
     place();
   }
 
