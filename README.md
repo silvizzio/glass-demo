@@ -36,16 +36,19 @@ npm run build
 
 ## Render modes (index.html)
 
-The single-file demo has two renderers for the same UI. Use the switch at top center, the keys `1` and `2`, or `?glass=` in the URL.
+The single-file demo has three renderers for the same UI. Use the switch at top center, the keys `1`, `2`, `3`, or `?glass=` in the URL.
 
 | Mode | URL | Technique | Browsers |
 | --- | --- | --- | --- |
 | Liquid DOM | `?glass=dom` | [liquid-dom](https://github.com/AndrewPrifer/liquid-dom), WebGPU | Desktop Chrome with `chrome://flags/#canvas-draw-element` enabled |
-| SVG backdrop | `?glass=backdrop` | `backdrop-filter: url(#svg-filter)`, after [rebane2001's gist](https://gist.github.com/rebane2001/8ba35ad6e1b17c4cb5b2b2431d9e992c) | Chromium browsers (Chrome, Edge, Arc). Safari and Firefox show the panels without glass. |
+| SVG backdrop | `?glass=backdrop` | `backdrop-filter: url(#svg-filter)`, after [rebane2001's gist](https://gist.github.com/rebane2001/8ba35ad6e1b17c4cb5b2b2431d9e992c) | Chromium browsers (Chrome, Edge, Arc) |
+| WebGL glass | `?glass=webgl` | [ybouane/liquidglass](https://github.com/ybouane/liquidglass) 1.0.3, WebGL 1 refraction shader over a captured backdrop | Chrome, Safari, Firefox, Edge, desktop and mobile |
 
-Default: Liquid DOM when the browser supports it, else SVG backdrop. Add `?tune` for optics sliders of the active mode.
+Default: Liquid DOM when the browser supports it, else WebGL glass. Add `?tune` for optics sliders of the active mode.
 
-SVG backdrop generates one filter for each panel, sized to that panel. Each lens is larger than its panel, so the edge refraction can sample pixels outside the panel, and a rounded-rect mask clips the result to the panel shape.
+In WebGL glass mode the stage is laid out in screen px (the library measures boxes with both `getBoundingClientRect` and `offsetWidth`, so a CSS transform on the root misaligns the glass). Panel content keeps the design size with CSS `zoom`. The live map is mirrored into a 2D canvas that the library draws directly.
+
+`vendor/liquidglass.js` is the published bundle of `@ybouane/liquidglass@1.0.3` (MIT).
 
 ## Background (index.html)
 

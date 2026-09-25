@@ -110,7 +110,7 @@
   }
   body.dragging .grip { cursor: grabbing; }
 
-  .backdrop .shadow {
+  .backdrop .shadow, body.wg #stage > .shadow.wg-fill {
     position: absolute;
     inset: 0;
     background:
@@ -139,6 +139,25 @@
   }
   #stage > .lens.pressed { transform: scale(0.96); }
   #stage > .lens.is-hidden { display: none; }
+  /* WebGL glass (ybouane/liquidglass): the stage is laid out in screen px, not transformed,
+     because the library measures boxes with getBoundingClientRect and offsetWidth together.
+     Panel content keeps the 1920 x 1080 design size through CSS zoom. */
+  body.wg #stage { transform: none !important; width: 100vw; height: 100vh; overflow: hidden; }
+  body.wg #stage > .panel { z-index: 2; overflow: visible; background: none; box-shadow: none; }
+  body.wg #stage > .panel > :not(canvas) { zoom: var(--wg-s, 1); }
+  body.wg #stage > .panel.is-hidden { display: none; }
+  body.wg #stage > .header { z-index: 3; zoom: var(--wg-s, 1); }
+  body.wg #stage > .wg-fill { position: absolute; inset: 0; width: 100%; height: 100%; }
+  body.wg #stage > img.wg-fill { object-fit: cover; transform-origin: 50% 50%; transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  body.wg.dragging #stage > img.wg-fill, body.wg.drifting #stage > img.wg-fill { transition: none; }
+  body.wg[data-bg="map"] #stage > img.wg-fill { display: none; }
+  body.wg[data-bg="image"] #stage > canvas.wg-fill { display: none; }
+  body.wg #stage > .pan-plane { z-index: 1; }
+  body.wg > .backdrop { position: fixed; inset: 0; width: 100vw; height: 100vh; }
+  .wg-attrib { position: fixed; right: 8px; bottom: 4px; z-index: 30; }
+  .wg-attrib .mapboxgl-ctrl-bottom-right { position: static; }
+  body.wg #stage { z-index: 1; }
+
   #lens-defs { position: absolute; left: -9999px; top: -9999px; width: 0; height: 0; overflow: hidden; }
 
   .label-caps {
@@ -176,7 +195,7 @@
 
   /* Timeline */
   .timeline { display: flex; align-items: center; width: 100%; height: 100%; padding: 12px 16px; gap: 8px; }
-  .tl-step { display: flex; align-items: center; justify-content: center; padding: 8px; background: var(--black-50); flex-shrink: 0; }
+  .tl-step { display: flex; align-items: center; justify-content: center; padding: 8px; background: transparent; flex-shrink: 0; }
   .tl-step .icon { width: 20px; height: 20px; }
   .tl-body { flex: 1 0 0; min-width: 1px; display: flex; flex-direction: column; gap: 16px; }
   .tl-top { display: flex; align-items: center; justify-content: space-between; }
@@ -426,6 +445,7 @@
 <div id="modes" role="group" aria-label="Glass renderer">
   <button type="button" data-mode="dom"><kbd>1</kbd>Liquid DOM</button>
   <button type="button" data-mode="backdrop"><kbd>2</kbd>SVG backdrop</button>
+  <button type="button" data-mode="webgl"><kbd>3</kbd>WebGL glass</button>
   <span class="sep" aria-hidden="true"></span>
   <button type="button" data-bg="map"><kbd>M</kbd>Map</button>
   <button type="button" data-bg="image"><kbd>I</kbd>Image</button>
@@ -683,6 +703,25 @@
   };
   const LENS_MARGIN = 48;
 
+  // WebGL glass (ybouane/liquidglass 1.0.3), starting values. Tune with ?tune and paste the copied JSON here.
+  // Sizes (cornerRadius, zRadius, shadowSpread) are design px; they are scaled to screen px at runtime.
+  const WEBGL_GLASS_URL = './vendor/liquidglass.js';
+  const WG_OPTICS = {
+    refraction: 0.69,
+    chromAberration: 0.05,
+    edgeHighlight: 0.08,
+    specular: 0.15,
+    fresnel: 1,
+    blurAmount: 0,
+    zRadius: 28,
+    brightness: -0.08,
+    saturation: 0,
+    tintStrength: 0,
+    shadowOpacity: 0.25,
+    shadowSpread: 10,
+    shadowOffsetY: 2,
+  };
+
   // Background: live Mapbox satellite map (default) or the static render
   const MAPBOX_JS = 'https://api.mapbox.com/mapbox-gl-js/v3.31.0/mapbox-gl.js';
   // Token comes from config.js (git-ignored locally, written from MAPBOX_TOKEN on Vercel)
@@ -744,6 +783,8 @@
 
   /* ---------- Stage: DOM copy of the UI, scaled to the viewport ---------- */
   // Fallback mode: the stage is the visible UI. Glass mode: the stage is an invisible hit layer on top of the canvas.
+  // 1 in the transformed-stage modes; the stage scale in WebGL mode, where the background is in screen px
+  let renderUnit = 1;
   const panPlane = document.createElement('div');
   panPlane.className = 'pan-plane';
   panPlane.setAttribute('aria-hidden', 'true');
@@ -1082,6 +1123,160 @@
     }
   }
 
+  /* ---------- WebGL glass: ybouane/liquidglass, one WebGL context for all panels ---------- */
+  // The library captures the direct children of the root into a texture and runs a refraction
+  // shader for each glass element. Glass elements must be direct children of the root.
+  async function startWebgl() {
+    const probe = document.createElement('canvas');
+    if (!probe.getContext('webgl')) throw new Error('WebGL is not available');
+    const { LiquidGlass } = await import(WEBGL_GLASS_URL);
+    await document.fonts.ready;
+    document.body.classList.remove('glass', 'bd');
+    document.body.classList.add('wg');
+
+    const stage = document.getElementById('stage');
+    const optics = { ...WG_OPTICS };
+
+    // The live map and the render stay outside the root. The root gets drawable copies:
+    // an <img> for the render and a 2D canvas that mirrors the Mapbox canvas.
+    document.body.prepend(backdrop);
+    const image = backdrop.querySelector('.render').cloneNode(true);
+    image.classList.add('wg-fill');
+    image.removeAttribute('alt');
+    const mirror = document.createElement('canvas');
+    mirror.className = 'wg-fill';
+    const shade = backdrop.querySelector('.shadow').cloneNode(true);
+    shade.classList.add('wg-fill');
+    stage.append(image, mirror, shade, panPlane);
+    for (const p of PANELS) stage.append(p.el);
+    stage.append(header);
+    header.style.position = 'absolute';
+
+    let scale = 1;
+    let ox = 0;
+    let oy = 0;
+    const layoutPanel = (p) => {
+      p.el.style.left = `${ox + p.x * scale}px`;
+      p.el.style.top = `${oy + p.y * scale}px`;
+      p.el.style.width = `${p.w * scale}px`;
+      p.el.style.height = `${p.h * scale}px`;
+      p.el.style.borderRadius = `${p.r * scale}px`;
+    };
+    const configFor = (p) => JSON.stringify({
+      ...optics,
+      cornerRadius: p.r * scale,
+      zRadius: optics.zRadius * scale,
+      shadowSpread: optics.shadowSpread * scale,
+      shadowOffsetY: optics.shadowOffsetY * scale,
+      button: Boolean(p.press),
+    });
+    const fit = () => {
+      scale = Math.min(innerWidth / W, innerHeight / H);
+      ox = (innerWidth - W * scale) / 2;
+      oy = (innerHeight - H * scale) / 2;
+      stageScale = scale;
+      renderUnit = scale;
+      document.body.style.setProperty('--wg-s', String(scale));
+      panPlane.style.left = '0px';
+      panPlane.style.top = '0px';
+      panPlane.style.width = `${innerWidth}px`;
+      panPlane.style.height = `${innerHeight}px`;
+      header.style.left = `${ox / scale}px`;
+      header.style.top = `${oy / scale}px`;
+      for (const p of PANELS) {
+        layoutPanel(p);
+        p.el.dataset.config = configFor(p);
+      }
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      mirror.width = Math.round(innerWidth * dpr);
+      mirror.height = Math.round(innerHeight * dpr);
+      drawMirror();
+      applyRenderTransform();
+    };
+
+    let instance = null;
+    const mctx = mirror.getContext('2d');
+    function drawMirror() {
+      const map = background.map;
+      if (!map || background.kind !== 'map') return;
+      mctx.drawImage(map.getCanvas(), 0, 0, mirror.width, mirror.height);
+      instance?.markChanged(mirror);
+    }
+    // Mapbox logo and attribution sit under the stage in this mode; lift them above it
+    const liftAttribution = () => {
+      const ctrl = backdrop.querySelector('.mapboxgl-ctrl-bottom-right');
+      if (!ctrl || ctrl.closest('.wg-attrib')) return;
+      const holder = document.createElement('div');
+      holder.className = 'wg-attrib';
+      holder.append(ctrl);
+      document.body.append(holder);
+      const sync = () => { holder.style.display = background.kind === 'map' ? '' : 'none'; };
+      sync();
+      const prev = background.onKindChange;
+      background.onKindChange = (kind) => { prev?.(kind); sync(); };
+    };
+    const hookMap = (map) => {
+      map.on('render', drawMirror);
+      liftAttribution();
+    };
+    background.onMapCreated = hookMap;
+    if (background.map) hookMap(background.map);
+    background.onImageChange = () => instance?.markChanged(image);
+    background.onKindChange = () => {
+      drawMirror();
+      instance?.markChanged();
+    };
+
+    addEventListener('resize', fit);
+    fit();
+
+    // The UI is usable while the glass initialises (font embedding and first captures)
+    LiquidGlass.init({ root: stage, glassElements: PANELS.map((p) => p.el) })
+      .then((ready) => {
+        instance = ready;
+        instance.markChanged();
+      })
+      .catch((error) => {
+        console.error('WebGL glass failed to initialise.', error);
+        showNotice('WebGL glass failed to start. The panels work, without glass.');
+      });
+
+    view.setVisible = (p, visible) => {
+      p.visible = visible;
+      p.el.classList.toggle('is-hidden', !visible);
+      instance?.markChanged();
+    };
+    view.movePanel = (p) => {
+      layoutPanel(p);
+      instance?.markChanged();
+    };
+
+    if (params.has('tune')) {
+      buildTuner({
+        controls: [
+          ['refraction', 0, 2, 0.01],
+          ['chromAberration', 0, 0.5, 0.005],
+          ['edgeHighlight', 0, 1, 0.01],
+          ['specular', 0, 1, 0.01],
+          ['fresnel', 0, 2, 0.05],
+          ['blurAmount', 0, 1, 0.01],
+          ['zRadius', 0, 80, 1],
+          ['brightness', -0.5, 0.5, 0.01],
+          ['saturation', -1, 1, 0.01],
+          ['tintStrength', 0, 1, 0.01],
+          ['shadowOpacity', 0, 1, 0.01],
+          ['shadowSpread', 0, 40, 1],
+        ],
+        state: optics,
+        apply: (key, value) => {
+          optics[key] = value;
+          for (const p of PANELS) p.el.dataset.config = configFor(p);
+        },
+        exportJson: () => ({ ...optics }),
+      });
+    }
+  }
+
   /* ---------- Tuning panel (?tune) ---------- */
   function buildTuner({ controls, state, apply, exportJson }) {
     document.body.classList.add('show-tune');
@@ -1234,8 +1429,8 @@
 
   function clampImagePan() {
     // The pan plane has the same size as the backdrop and is always laid out in the page
-    const w = panPlane.offsetWidth;
-    const h = panPlane.offsetHeight;
+    const w = panPlane.offsetWidth / renderUnit;
+    const h = panPlane.offsetHeight / renderUnit;
     const maxX = ((ui.zoom - 1) * w) / 2;
     const maxY = ((ui.zoom - 1) * h) / 2;
     imageView.x = Math.max(-maxX, Math.min(maxX, imageView.x));
@@ -1245,8 +1440,9 @@
   function applyRenderTransform() {
     clampImagePan();
     const d = imageView.drift;
-    const t = `translate(${imageView.x + d.x}px, ${imageView.y + d.y}px) scale(${ui.zoom * d.z})`;
-    all('.backdrop .render').forEach((el) => { el.style.transform = t; });
+    const t = `translate(${(imageView.x + d.x) * renderUnit}px, ${(imageView.y + d.y) * renderUnit}px) scale(${ui.zoom * d.z})`;
+    all('.render').forEach((el) => { el.style.transform = t; });
+    background.onImageChange?.();
   }
 
   const background = {
@@ -1267,6 +1463,7 @@
       url.searchParams.set('bg', kind);
       history.replaceState(null, '', url.toString());
       if (kind === 'map') await this.ensureMap();
+      this.onKindChange?.(kind);
     },
 
     ensureMap() {
@@ -1299,6 +1496,7 @@
             });
             new ResizeObserver(() => map.resize()).observe(container);
             this.map = map;
+            this.onMapCreated?.(map);
             resolve();
           } catch (error) {
             fail(error);
@@ -1316,7 +1514,7 @@
 
     panBy(dx, dy) {
       if (this.kind === 'map' && this.map) {
-        this.map.panBy([-dx, -dy], { duration: 0 });
+        this.map.panBy([-dx * renderUnit, -dy * renderUnit], { duration: 0 });
       } else {
         imageView.x += dx;
         imageView.y += dy;
@@ -1327,14 +1525,14 @@
     zoomAt(delta, point) {
       if (this.kind === 'map' && this.map) {
         const zoom = Math.max(MAP_ZOOM.min, Math.min(MAP_ZOOM.max, this.map.getZoom() + delta));
-        const around = point ? this.map.unproject(point) : undefined;
+        const around = point ? this.map.unproject([point[0] * renderUnit, point[1] * renderUnit]) : undefined;
         this.map.zoomTo(zoom, { duration: 0, around });
       } else {
         const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ui.zoom * Math.pow(2, delta)));
         if (point) {
           // Keep the point under the cursor fixed
-          const cx = panPlane.offsetWidth / 2 + imageView.x;
-          const cy = panPlane.offsetHeight / 2 + imageView.y;
+          const cx = panPlane.offsetWidth / renderUnit / 2 + imageView.x;
+          const cy = panPlane.offsetHeight / renderUnit / 2 + imageView.y;
           const k = next / ui.zoom;
           imageView.x += (point[0] - cx) * (1 - k);
           imageView.y += (point[1] - cy) * (1 - k);
@@ -1489,7 +1687,7 @@
   }
 
   /* ---------- Render mode switch ---------- */
-  const MODES = ['dom', 'backdrop'];
+  const MODES = ['dom', 'backdrop', 'webgl'];
   const domSupported = supportsLiquidGlass();
 
   function goToMode(next) {
@@ -1544,11 +1742,11 @@
   const IS_CHROMIUM = !IS_IOS && /Chrome\/|Chromium\/|Edg\//.test(UA);
 
   const requested = params.get('glass');
-  let mode = MODES.includes(requested) ? requested : (domSupported ? 'dom' : 'backdrop');
+  let mode = MODES.includes(requested) ? requested : (domSupported ? 'dom' : 'webgl');
   if (mode === 'dom' && !domSupported) {
-    mode = 'backdrop';
+    mode = 'webgl';
     if (requested === 'dom') {
-      showNotice('Liquid DOM needs desktop Chrome with <code>chrome://flags/#canvas-draw-element</code> enabled. Showing SVG backdrop glass.');
+      showNotice('Liquid DOM needs desktop Chrome with <code>chrome://flags/#canvas-draw-element</code> enabled. Showing WebGL glass.');
     }
   }
 
@@ -1558,8 +1756,18 @@
         await startGlass();
         return 'dom';
       } catch (error) {
-        console.error('Liquid DOM failed, using SVG backdrop glass.', error);
-        showNotice('Liquid DOM failed to start. Showing SVG backdrop glass.');
+        console.error('Liquid DOM failed, using WebGL glass.', error);
+        showNotice('Liquid DOM failed to start. Showing WebGL glass.');
+        target = 'webgl';
+      }
+    }
+    if (target === 'webgl') {
+      try {
+        await startWebgl();
+        return 'webgl';
+      } catch (error) {
+        console.error('WebGL glass failed, using SVG backdrop glass.', error);
+        showNotice('WebGL glass failed to start. Showing SVG backdrop glass.');
       }
     }
     await startBackdrop();
