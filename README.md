@@ -91,3 +91,13 @@ The page has two layouts for the same UI, state and render modes.
 Portrait layout: header (logo, avatar), tabs with a settings button (render mode, Map or Image, Dark or Light), full-width timeline, map controls above a bottom sheet with five sections (District IO, Assets, Areas, KPIs, Videos). Content scrolls inside the sheet. Safe-area insets are applied for the notch and the home bar. Touch: drag, pinch, double-tap to reset.
 
 On iPhone every browser is WebKit, so only WebGL glass refracts; the other modes are shown disabled. Force a layout with `?layout=desktop` or `?layout=mobile`.
+
+## Adjust panel (index.html)
+
+Every render mode has an **Adjust** panel for its optics. Open it with the **Adjust** button in the top-center bar, the key `A`, or `?tune` in the URL. On phones it opens from the settings sheet as a bottom sheet. `Esc` closes it.
+
+- The sliders change the glass live. Dark and Light have separate values.
+- Values save in the browser (localStorage) for each mode and tone.
+- **Reset** returns the active mode and tone to the defaults.
+- **Copy link** copies a URL with the mode, tone, background and values (`?o=` base64url JSON), so a look can be shared exactly.
+- **Copy JSON** copies the values to set a new default in `index.html` (`OPTICS`, `BD_OPTICS`, `WG_OPTICS`, `GC_OPTICS` and `TONE_PRESETS`).

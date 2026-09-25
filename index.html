@@ -553,27 +553,93 @@
   body.mobile .backdrop .mapboxgl-ctrl-bottom-right { top: 38%; bottom: auto; }
   body.mobile .wg-attrib { top: 38%; bottom: auto; }
 
+  /* ---------- Adjust panel: optics sliders for the active mode and tone ---------- */
   #tune {
     position: fixed;
-    top: 12px;
-    right: 12px;
-    z-index: 30;
+    left: 50%;
+    top: var(--tune-top, 110px);
+    z-index: 35;
     display: none;
-    width: 280px;
-    max-height: calc(100vh - 24px);
+    width: min(860px, calc(100vw - 32px));
+    max-height: calc(100vh - var(--tune-top, 110px) - 16px);
     overflow: auto;
-    padding: 14px;
-    border-radius: 14px;
-    background: rgba(10, 12, 14, 0.9);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-    font-size: 12px;
+    padding: 18px 24px 20px;
+    border-radius: 16px;
+    background: rgba(18, 18, 22, 0.96);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px rgba(0, 0, 0, 0.5);
+    transform: translateX(-50%);
+    color: #e4e4e7;
+    font-size: 13px;
+    line-height: 18px;
+    overscroll-behavior: contain;
   }
   body.show-tune #tune { display: block; }
-  #tune label { display: grid; grid-template-columns: 1fr 52px; gap: 2px 8px; margin-bottom: 10px; }
-  #tune input { grid-column: 1 / -1; width: 100%; }
-  #tune output { text-align: right; font-variant-numeric: tabular-nums; }
-  #tune .row { display: flex; gap: 8px; }
-  #tune .row button { flex: 1; padding: 6px 0; border-radius: 8px; background: var(--white-10); font-size: 12px; }
+  #tune .tune-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+  #tune .tune-title { font-size: 14px; font-weight: 600; color: #fafafa; }
+  #tune .tune-sub { color: #a1a1aa; font-weight: 400; }
+  #tune .tune-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  #tune .tune-actions button {
+    padding: 6px 12px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e4e4e7;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+  }
+  #tune .tune-actions button:hover { background: rgba(255, 255, 255, 0.14); }
+  #tune .tune-actions [data-t="close"] { width: 28px; padding: 6px 0; font-size: 14px; }
+  #tune .tune-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 48px; row-gap: 8px; }
+  #tune .tune-row { display: grid; grid-template-columns: 132px minmax(0, 1fr) 52px; align-items: center; gap: 16px; min-height: 28px; }
+  #tune .tune-row span { color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #tune .tune-row output { text-align: right; color: #e4e4e7; font-variant-numeric: tabular-nums; }
+  #tune input[type="range"] {
+    --p: 50%;
+    width: 100%;
+    height: 22px;
+    margin: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+  }
+  #tune input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: linear-gradient(to right, #a29bfe 0 var(--p), #2e2e36 var(--p) 100%);
+  }
+  #tune input[type="range"]::-moz-range-track { height: 6px; border-radius: 9999px; background: #2e2e36; }
+  #tune input[type="range"]::-moz-range-progress { height: 6px; border-radius: 9999px; background: #a29bfe; }
+  #tune input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -5px;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  }
+  #tune input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 9999px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+  #tune input[type="range"]:focus-visible { outline: none; }
+  #tune input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(162, 155, 254, 0.6); }
+  #tune input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px rgba(162, 155, 254, 0.6); }
+  #tune .tune-note { margin-top: 12px; color: #71717a; font-size: 12px; }
+  body.mobile #tune {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    max-height: 62vh;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-radius: 20px 20px 0 0;
+    transform: none;
+  }
+  body.mobile #tune .tune-head { flex-wrap: wrap; }
+  body.mobile #tune .tune-grid { grid-template-columns: minmax(0, 1fr); }
+  body.mobile #tune .tune-row { grid-template-columns: 112px minmax(0, 1fr) 44px; gap: 12px; }
 
   /* ---------- Portrait layout (phones): 430 px wide design frame, height follows the screen ---------- */
   body.mobile { --w: 430px; }
@@ -642,11 +708,13 @@
   <span class="sep" aria-hidden="true"></span>
   <button type="button" data-tone="dark"><kbd>D</kbd>Dark</button>
   <button type="button" data-tone="light"><kbd>L</kbd>Light</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" data-adjust aria-expanded="false" aria-controls="tune"><kbd>A</kbd>Adjust</button>
 </div>
 
 <div id="lens-defs" aria-hidden="true"></div>
 
-<div id="tune" aria-label="Glass tuning"></div>
+<div id="tune" role="dialog" aria-label="Adjust glass"></div>
 
 <div id="coach" role="dialog" aria-live="polite" aria-label="Tip">
   <span class="dots" aria-hidden="true"></span>
@@ -977,15 +1045,98 @@
   const tone = { value: TONES.includes(toneParam) ? toneParam : 'dark' };
   document.body.dataset.tone = tone.value;
 
-  function tonalOptics(base, mode) {
-    return {
-      dark: { ...structuredClone(base), ...structuredClone(TONE_PRESETS[mode].dark) },
-      light: { ...structuredClone(base), ...structuredClone(TONE_PRESETS[mode].light) },
-    };
+  // Adjust panel controls: [key, label, min, max, step] or { key, label, min, max, step, get, set }
+  const ADJUST_CONTROLS = {
+    dom: [
+      ['blur', 'Blur', 0, 40, 0.5],
+      ['bezelWidth', 'Bezel width', 0, 80, 1],
+      ['thickness', 'Thickness', 0, 200, 1],
+      ['displacementFactor', 'Displacement', 0, 3, 0.05],
+      ['displacementBlur', 'Displacement blur', 0, 30, 0.5],
+      ['ior', 'IOR', 1, 2.5, 0.01],
+      ['specularStrength', 'Specular strength', 0, 3, 0.05],
+      ['specularOpacity', 'Specular opacity', 0, 1, 0.01],
+      ['spacing', 'Spacing', 0, 40, 1],
+      { key: 'tintAlpha', label: 'Tint', min: 0, max: 0.8, step: 0.01, get: (o) => o.tint.a, set: (o, v) => { o.tint = { ...o.tint, a: v }; } },
+      ['shadowBlur', 'Shadow blur', 0, 80, 1],
+      ['shadowOffsetY', 'Shadow offset', -20, 40, 1],
+      { key: 'shadowAlpha', label: 'Shadow opacity', min: 0, max: 0.6, step: 0.01, get: (o) => o.shadowColor.a, set: (o, v) => { o.shadowColor = { ...o.shadowColor, a: v }; } },
+    ],
+    backdrop: [
+      ['refraction', 'Refraction', 0, 300, 1],
+      ['centerDistortion', 'Center distortion', 0, 255, 1],
+      ['centerSize', 'Center size', 0, 20, 0.5],
+      ['preBlur', 'Pre-blur', 0, 10, 0.1],
+      ['postBlur', 'Post-blur', 0, 10, 0.1],
+      ['iridescence', 'Iridescence', 0, 50, 1],
+      ['darknessOpacity', 'Darkness opacity', 0, 255, 1],
+      ['darknessBlur', 'Darkness blur', 0, 50, 0.5],
+      ['lightnessOpacity', 'Lightness opacity', 0, 255, 1],
+      ['lightnessBlur', 'Lightness blur', 0, 50, 0.5],
+      ['tint', 'Tint', 0, 0.6, 0.01],
+    ],
+    webgl: [
+      ['refraction', 'Refraction', 0, 2, 0.01],
+      ['chromAberration', 'Chroma', 0, 0.5, 0.005],
+      ['edgeHighlight', 'Edge highlight', 0, 1, 0.01],
+      ['specular', 'Specular', 0, 1, 0.01],
+      ['fresnel', 'Fresnel', 0, 2, 0.05],
+      ['blurAmount', 'Blur', 0, 1, 0.01],
+      ['zRadius', 'Bevel depth', 0, 80, 1],
+      ['brightness', 'Brightness', -0.5, 0.5, 0.01],
+      ['saturation', 'Saturation', -1, 1, 0.01],
+      ['tintStrength', 'Blue tint', 0, 1, 0.01],
+      ['shadowOpacity', 'Shadow opacity', 0, 1, 0.01],
+      ['shadowSpread', 'Shadow spread', 0, 40, 1],
+      ['tint', 'Fill tint', 0, 0.6, 0.01],
+    ],
+    glasscn: [
+      ['refraction', 'Refraction', 0, 80, 1],
+      ['bezel', 'Bezel', 0.05, 1, 0.01],
+      ['blur', 'Blur', 0, 16, 0.5],
+      ['saturation', 'Saturation', 0.5, 2.5, 0.01],
+      ['rimLight', 'Rim light', 0, 1, 0.01],
+      ['rimDark', 'Rim dark', 0, 1, 0.01],
+      ['tint', 'Tint', 0, 0.6, 0.01],
+    ],
+  };
+  const MODE_TITLES = { dom: 'Liquid DOM', backdrop: 'SVG backdrop', webgl: 'WebGL glass', glasscn: 'glasscn' };
+
+  const opticsKey = (mode, t) => `dso-glass-optics:${mode}:${t}`;
+  function loadSavedOptics(mode, t) {
+    try { return JSON.parse(localStorage.getItem(opticsKey(mode, t)) || 'null'); } catch { return null; }
+  }
+  // Values from a shared link: ?o=<base64url of {m, t, v}>
+  function decodeLinkOptics() {
+    const raw = new URLSearchParams(location.search).get('o');
+    if (!raw) return null;
+    try {
+      const json = atob(raw.replace(/-/g, '+').replace(/_/g, '/'));
+      const data = JSON.parse(decodeURIComponent(escape(json)));
+      return data && data.m && data.t && data.v ? data : null;
+    } catch {
+      return null;
+    }
+  }
+  function encodeLinkOptics(data) {
+    const json = unescape(encodeURIComponent(JSON.stringify(data)));
+    return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  const LINK_OPTICS = decodeLinkOptics();
+
+  function defaultOptics(base, mode, t) {
+    return { ...structuredClone(base), ...structuredClone(TONE_PRESETS[mode][t]) };
   }
 
-  function resetTuner() {
-    document.getElementById('tune').replaceChildren();
+  // Defaults, then values saved in this browser, then values from a shared link
+  function tonalOptics(base, mode) {
+    const build = (t) => {
+      const optics = defaultOptics(base, mode, t);
+      Object.assign(optics, loadSavedOptics(mode, t) || {});
+      if (LINK_OPTICS && LINK_OPTICS.m === mode && LINK_OPTICS.t === t) Object.assign(optics, structuredClone(LINK_OPTICS.v));
+      return optics;
+    };
+    return { dark: build('dark'), light: build('light') };
   }
 
   // Background: live Mapbox satellite map (default) or the static render
@@ -1277,16 +1428,22 @@
     };
     requestAnimationFrame(frame);
 
+    const renderDom = () => {
+      for (const key of Object.keys(domOptics)) container[key] = domOptics[key];
+    };
     view.setTone = (next) => {
       domOptics = domPresets[next];
-      for (const key of Object.keys(domOptics)) container[key] = domOptics[key];
-      if (params.has('tune')) {
-        resetTuner();
-        buildDomTuner(container, domOptics);
-      }
+      renderDom();
+      adjust.refresh();
     };
-
-    if (params.has('tune')) buildDomTuner(container, domOptics);
+    adjust.register({
+      mode: 'dom',
+      base: OPTICS,
+      presets: domPresets,
+      optics: () => domOptics,
+      replace: (o) => { domOptics = o; },
+      render: renderDom,
+    });
   }
 
   /* ---------- SVG backdrop glass: rebane2001 gist, one filter per panel ---------- */
@@ -1449,40 +1606,23 @@
       p.lens.style.top = `${p.y - LENS_MARGIN}px`;
     };
 
-    const bdTuner = () => buildTuner({
-        controls: [
-          ['refraction', 0, 300, 1],
-          ['centerDistortion', 0, 255, 1],
-          ['centerSize', 0, 20, 0.5],
-          ['preBlur', 0, 10, 0.1],
-          ['postBlur', 0, 10, 0.1],
-          ['iridescence', 0, 50, 1],
-          ['darknessOpacity', 0, 255, 1],
-          ['darknessBlur', 0, 50, 0.5],
-          ['lightnessOpacity', 0, 255, 1],
-          ['lightnessBlur', 0, 50, 0.5],
-          ['tint', 0, 0.6, 0.01],
-        ],
-        state: optics,
-        apply: (key, value) => {
-          optics[key] = value;
-          if (key === 'tint') document.body.style.setProperty('--bd-tint', String(value));
-          else for (const item of lenses) applyLensOptics(item.lens, item.p, optics);
-        },
-        exportJson: () => ({ tone: tone.value, ...optics }),
-      });
-
-    view.setTone = (next) => {
-      optics = bdPresets[next];
+    const renderBackdrop = () => {
       document.body.style.setProperty('--bd-tint', String(optics.tint));
       for (const item of lenses) applyLensOptics(item.lens, item.p, optics);
-      if (params.has('tune')) {
-        resetTuner();
-        bdTuner();
-      }
     };
-
-    if (params.has('tune')) bdTuner();
+    view.setTone = (next) => {
+      optics = bdPresets[next];
+      renderBackdrop();
+      adjust.refresh();
+    };
+    adjust.register({
+      mode: 'backdrop',
+      base: BD_OPTICS,
+      presets: bdPresets,
+      optics: () => optics,
+      replace: (o) => { optics = o; },
+      render: renderBackdrop,
+    });
   }
 
   /* ---------- glasscn refract: port of kostyniuk/glasscn-components liquid-glass.tsx (MIT) ---------- */
@@ -1615,34 +1755,19 @@
       p.el.style.top = `${p.y}px`;
     };
 
-    const gcTuner = () => buildTuner({
-        controls: [
-          ['refraction', 0, 80, 1],
-          ['bezel', 0.05, 1, 0.01],
-          ['blur', 0, 16, 0.5],
-          ['saturation', 0.5, 2.5, 0.01],
-          ['rimLight', 0, 1, 0.01],
-          ['rimDark', 0, 1, 0.01],
-          ['tint', 0, 0.6, 0.01],
-        ],
-        state: optics,
-        apply: (key, value) => {
-          optics[key] = value;
-          apply();
-        },
-        exportJson: () => ({ tone: tone.value, ...optics }),
-      });
-
     view.setTone = (next) => {
       optics = gcPresets[next];
       apply();
-      if (params.has('tune')) {
-        resetTuner();
-        gcTuner();
-      }
+      adjust.refresh();
     };
-
-    if (params.has('tune')) gcTuner();
+    adjust.register({
+      mode: 'glasscn',
+      base: GC_OPTICS,
+      presets: gcPresets,
+      optics: () => optics,
+      replace: (o) => { optics = o; },
+      render: apply,
+    });
   }
 
   /* ---------- WebGL glass: ybouane/liquidglass, one WebGL context for all panels ---------- */
@@ -1820,117 +1945,158 @@
       instance?.markChanged();
     };
 
-    const wgTuner = () => buildTuner({
-        controls: [
-          ['refraction', 0, 2, 0.01],
-          ['chromAberration', 0, 0.5, 0.005],
-          ['edgeHighlight', 0, 1, 0.01],
-          ['specular', 0, 1, 0.01],
-          ['fresnel', 0, 2, 0.05],
-          ['blurAmount', 0, 1, 0.01],
-          ['zRadius', 0, 80, 1],
-          ['brightness', -0.5, 0.5, 0.01],
-          ['saturation', -1, 1, 0.01],
-          ['tintStrength', 0, 1, 0.01],
-          ['shadowOpacity', 0, 1, 0.01],
-          ['shadowSpread', 0, 40, 1],
-          ['tint', 0, 0.6, 0.01],
-        ],
-        state: optics,
-        apply: (key, value) => {
-          optics[key] = value;
-          document.body.style.setProperty('--wg-tint', String(optics.tint));
-          for (const p of PANELS) p.el.dataset.config = configFor(p);
-          instance?.markChanged();
-        },
-        exportJson: () => ({ tone: tone.value, ...optics }),
-      });
-
-    view.setTone = (next) => {
-      optics = wgPresets[next];
+    const renderWebgl = () => {
       document.body.style.setProperty('--wg-tint', String(optics.tint));
       for (const p of PANELS) p.el.dataset.config = configFor(p);
       instance?.markChanged();
-      if (params.has('tune')) {
-        resetTuner();
-        wgTuner();
-      }
     };
-
-    if (params.has('tune')) wgTuner();
+    view.setTone = (next) => {
+      optics = wgPresets[next];
+      renderWebgl();
+      adjust.refresh();
+    };
+    adjust.register({
+      mode: 'webgl',
+      base: WG_OPTICS,
+      presets: wgPresets,
+      optics: () => optics,
+      replace: (o) => { optics = o; },
+      render: renderWebgl,
+    });
   }
 
-  /* ---------- Tuning panel (?tune) ---------- */
-  function buildTuner({ controls, state, apply, exportJson }) {
-    document.body.classList.add('show-tune');
-    const box = document.getElementById('tune');
-    for (const [key, min, max, step] of controls) {
-      const label = document.createElement('label');
-      label.innerHTML = `<span>${key}</span><output>${state[key]}</output><input type="range" min="${min}" max="${max}" step="${step}" value="${state[key]}">`;
-      const input = label.querySelector('input');
-      const out = label.querySelector('output');
-      input.addEventListener('input', () => {
-        const value = Number(input.value);
-        out.textContent = value;
-        apply(key, value);
-      });
-      box.append(label);
-    }
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = '<button type="button" data-t="copy">Copy values</button><button type="button" data-t="hide">Hide</button>';
-    row.addEventListener('click', async (event) => {
-      const action = event.target.dataset.t;
-      if (action === 'hide') document.body.classList.remove('show-tune');
-      if (action === 'copy') {
-        const json = JSON.stringify(exportJson(), null, 2);
-        try {
-          await navigator.clipboard.writeText(json);
-          event.target.textContent = 'Copied';
-        } catch {
-          console.log(json);
-          event.target.textContent = 'See console';
-        }
-        setTimeout(() => { event.target.textContent = 'Copy values'; }, 1400);
+  /* ---------- Adjust panel ---------- */
+  const adjust = {
+    el: document.getElementById('tune'),
+    spec: null,
+    saveTimer: 0,
+    register(spec) {
+      this.spec = spec;
+      if (params.has('tune')) this.open();
+    },
+    isOpen() {
+      return document.body.classList.contains('show-tune');
+    },
+    controls() {
+      return ADJUST_CONTROLS[this.spec.mode].map((c) => (Array.isArray(c)
+        ? { key: c[0], label: c[1], min: c[2], max: c[3], step: c[4] }
+        : c));
+    },
+    valueOf(c) {
+      const o = this.spec.optics();
+      return c.get ? c.get(o) : o[c.key];
+    },
+    format(c, value) {
+      const decimals = (String(c.step).split('.')[1] || '').length;
+      return Number(value).toFixed(decimals);
+    },
+    fill(input) {
+      const min = Number(input.min);
+      const max = Number(input.max);
+      input.style.setProperty('--p', `${((Number(input.value) - min) / (max - min)) * 100}%`);
+    },
+    build() {
+      if (!this.spec) return;
+      const title = `${MODE_TITLES[this.spec.mode]} <span class="tune-sub">· ${tone.value === 'dark' ? 'Dark' : 'Light'}</span>`;
+      this.el.innerHTML = `
+        <div class="tune-head">
+          <div class="tune-title">${title}</div>
+          <div class="tune-actions">
+            <button type="button" data-t="reset">Reset</button>
+            <button type="button" data-t="link">Copy link</button>
+            <button type="button" data-t="json">Copy JSON</button>
+            <button type="button" data-t="close" aria-label="Close">×</button>
+          </div>
+        </div>
+        <div class="tune-grid"></div>
+        <p class="tune-note">Values save in this browser for each mode and tone. Copy link shares this exact look.</p>`;
+      const grid = this.el.querySelector('.tune-grid');
+      for (const c of this.controls()) {
+        const row = document.createElement('label');
+        row.className = 'tune-row';
+        const value = this.valueOf(c);
+        row.innerHTML = `<span>${c.label}</span><input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${value}" aria-label="${c.label}"><output>${this.format(c, value)}</output>`;
+        const input = row.querySelector('input');
+        const out = row.querySelector('output');
+        this.fill(input);
+        input.addEventListener('input', () => {
+          const v = Number(input.value);
+          const o = this.spec.optics();
+          if (c.set) c.set(o, v);
+          else o[c.key] = v;
+          out.textContent = this.format(c, v);
+          this.fill(input);
+          this.spec.render();
+          this.save();
+        });
+        grid.append(row);
       }
-    });
-    box.append(row);
-  }
-
-  function buildDomTuner(container, optics) {
-    const state = { ...optics, tintAlpha: optics.tint.a, shadowAlpha: optics.shadowColor.a };
-    buildTuner({
-      controls: [
-        ['blur', 0, 40, 0.5],
-        ['bezelWidth', 0, 80, 1],
-        ['thickness', 0, 200, 1],
-        ['displacementFactor', 0, 3, 0.05],
-        ['displacementBlur', 0, 30, 0.5],
-        ['ior', 1, 2.5, 0.01],
-        ['specularStrength', 0, 3, 0.05],
-        ['specularOpacity', 0, 1, 0.01],
-        ['spacing', 0, 40, 1],
-        ['shadowBlur', 0, 80, 1],
-        ['shadowOffsetY', -20, 40, 1],
-        ['tintAlpha', 0, 0.8, 0.01],
-        ['shadowAlpha', 0, 0.6, 0.01],
-      ],
-      state,
-      apply: (key, value) => {
-        state[key] = value;
-        if (key === 'tintAlpha') optics.tint = { ...optics.tint, a: value };
-        else if (key === 'shadowAlpha') optics.shadowColor = { ...optics.shadowColor, a: value };
-        else optics[key] = value;
-        if (key === 'tintAlpha') container.tint = optics.tint;
-        else if (key === 'shadowAlpha') container.shadowColor = optics.shadowColor;
-        else container[key] = value;
-      },
-      exportJson: () => {
-        const { tintAlpha, shadowAlpha, ...rest } = state;
-        return { tone: tone.value, ...rest, tint: { ...optics.tint, a: tintAlpha }, shadowColor: { ...optics.shadowColor, a: shadowAlpha } };
-      },
-    });
-  }
+    },
+    save() {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = setTimeout(() => {
+        try { localStorage.setItem(opticsKey(this.spec.mode, tone.value), JSON.stringify(this.spec.optics())); } catch { /* storage can be blocked */ }
+      }, 200);
+    },
+    reset() {
+      try { localStorage.removeItem(opticsKey(this.spec.mode, tone.value)); } catch { /* storage can be blocked */ }
+      const fresh = defaultOptics(this.spec.base, this.spec.mode, tone.value);
+      this.spec.presets[tone.value] = fresh;
+      this.spec.replace(fresh);
+      this.spec.render();
+      this.build();
+    },
+    link() {
+      const url = new URL(location.href);
+      url.searchParams.set('glass', this.spec.mode);
+      url.searchParams.set('tone', tone.value);
+      url.searchParams.set('bg', background.kind);
+      url.searchParams.delete('tune');
+      url.searchParams.delete('hint');
+      url.searchParams.set('o', encodeLinkOptics({ m: this.spec.mode, t: tone.value, v: this.spec.optics() }));
+      return url.toString();
+    },
+    async copy(button, text) {
+      const label = button.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = 'Copied';
+      } catch {
+        console.log(text);
+        button.textContent = 'See console';
+      }
+      setTimeout(() => { button.textContent = label; }, 1400);
+    },
+    open() {
+      document.body.classList.add('show-tune');
+      document.querySelectorAll('[data-adjust]').forEach((el) => el.setAttribute('aria-expanded', 'true'));
+      this.build();
+      dispatchEvent(new Event('modes:place'));
+    },
+    close() {
+      document.body.classList.remove('show-tune');
+      document.querySelectorAll('[data-adjust]').forEach((el) => el.setAttribute('aria-expanded', 'false'));
+    },
+    toggle() {
+      if (this.isOpen()) this.close();
+      else this.open();
+    },
+    refresh() {
+      if (this.isOpen()) this.build();
+    },
+  };
+  adjust.el.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-t]');
+    if (!button) return;
+    const action = button.dataset.t;
+    if (action === 'close') adjust.close();
+    else if (action === 'reset') adjust.reset();
+    else if (action === 'link') adjust.copy(button, adjust.link());
+    else if (action === 'json') adjust.copy(button, JSON.stringify({ mode: adjust.spec.mode, tone: tone.value, optics: adjust.spec.optics() }, null, 2));
+  });
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && adjust.isOpen()) adjust.close();
+  });
 
   /* ---------- Interaction: one state, applied to every copy of the UI ---------- */
   const HERO = 'assets/media/district-io-hero.jpg';
@@ -2457,6 +2623,7 @@
     bar.querySelectorAll('button[data-tone]').forEach((el) => {
       el.addEventListener('click', () => setTone(el.dataset.tone));
     });
+    bar.querySelector('[data-adjust]')?.addEventListener('click', () => adjust.toggle());
     setTone(tone.value);
     bar.querySelectorAll('button[data-mode]').forEach((el) => {
       el.classList.toggle('on', el.dataset.mode === active);
@@ -2474,12 +2641,13 @@
       el.addEventListener('click', () => { if (el.dataset.mode !== active) goToMode(el.dataset.mode); });
     });
     addEventListener('keydown', (event) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest?.('input, textarea')) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest?.('input, textarea, #tune')) return;
       const key = event.key.toLowerCase();
       if (key === 'm') return background.set('map');
       if (key === 'i') return background.set('image');
       if (key === 'd') return setTone('dark');
       if (key === 'l') return setTone('light');
+      if (key === 'a') return adjust.toggle();
       const next = MODES[Number(event.key) - 1];
       if (next && next !== active) goToMode(next);
     });
@@ -2497,6 +2665,8 @@
       }
       const k = Math.max(0.75, s);
       bar.style.transform = `translate(${ox + (W * s) / 2 - (bar.offsetWidth * k) / 2}px, ${oy + 76 * s}px) scale(${k})`;
+      // The Adjust panel opens just below the bar
+      document.body.style.setProperty('--tune-top', `${Math.round(oy + 76 * s + bar.offsetHeight * k + 10)}px`);
     };
     addEventListener('resize', place);
     addEventListener('modes:place', place);
