@@ -104,16 +104,12 @@ Every render mode has an **Adjust** panel for its optics. Open it with the **Adj
 
 ## Performance HUD (index.html)
 
-Open with the **FPS** button in the top-center bar, the key `F`, or `?fps` in the URL.
+Open with the **FPS** button in the top-center bar, the key `F`, or `?fps` in the URL. The panel floats under the bar, like the Adjust panel. With both open, Adjust moves to the left and FPS to the right.
 
-| Metric | Meaning |
-| --- | --- |
-| fps and graph | Frames per second from `requestAnimationFrame`; red bars are frames over 1.5 x the display interval |
-| Frame avg, p95, worst | Frame interval over the last 2 s |
-| Dropped frames | Share of frames that missed the display interval |
-| Long tasks | Main-thread tasks over 50 ms (Chromium only) |
-| JS heap, Canvas, GPU | Memory (Chromium only), viewport and pixel ratio, GPU name |
+- **fps and verdict:** frames per second and a plain verdict (Smooth, Some stutter, Choppy) against the screen's refresh rate.
+- **Graph:** one bar for each frame; tall red bars are stutters.
+- **Frame time, Stutters, Glass:** average and slowest frame, share of stuttered frames in the last 2 s, and the glass in use.
+- **Technical details** (collapsed): 95th percentile frame time, long tasks, JavaScript memory, screen size and pixel ratio, graphics chip.
+- **Test glass cost:** 6 s with the glass on and 6 s with the glass off, with the background moving. The result says how much of each frame the glass takes, with a verdict (Light, Moderate, Heavy). Available in SVG backdrop, WebGL glass and glasscn.
 
-**Compare glass on/off** runs 6 s with the glass on and 6 s with the glass off (the drift keeps the background moving, so the glass must re-render every frame) and shows the cost of the glass in ms per frame. Available in SVG backdrop, WebGL glass and glasscn. Liquid DOM draws the whole UI, so it has no off state.
-
-Browsers do not expose GPU or CPU load percentages. The frame interval shows the load: when the GPU or the main thread cannot finish a frame in time, the interval grows and frames drop.
+Browsers do not expose GPU or CPU load percentages. The frame time shows the load: when the device cannot finish a frame in time, the frame takes longer and the motion stutters.
