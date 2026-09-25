@@ -641,6 +641,48 @@
   body.mobile #tune .tune-grid { grid-template-columns: minmax(0, 1fr); }
   body.mobile #tune .tune-row { grid-template-columns: 112px minmax(0, 1fr) 44px; gap: 12px; }
 
+  /* ---------- Performance HUD (?fps or key F) ---------- */
+  #perf {
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    z-index: 45;
+    display: none;
+    width: 340px;
+    max-height: calc(100vh - 24px);
+    overflow: auto;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(10, 12, 14, 0.88);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    color: #e4e4e7;
+    font: 11px/16px ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  body.show-perf #perf { display: block; }
+  #perf .fps { font-size: 22px; line-height: 26px; font-weight: 600; color: #fff; }
+  #perf .fps.warn { color: #fbbf24; }
+  #perf .fps.bad { color: #f87171; }
+  #perf .row { display: flex; justify-content: space-between; gap: 8px; }
+  #perf .row span:first-child { color: #a1a1aa; }
+  #perf .graph { display: block; width: 100%; height: 36px; margin: 6px 0; }
+  #perf .dim { color: #71717a; }
+  #perf .bench { margin-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 8px; }
+  #perf table { width: 100%; border-collapse: collapse; }
+  #perf td, #perf th { padding: 1px 0; text-align: right; font-weight: 400; }
+  #perf td:first-child, #perf th:first-child { text-align: left; color: #a1a1aa; }
+  #perf .btns { display: flex; gap: 6px; margin-top: 8px; }
+  #perf .btns button { flex: 1; padding: 5px 0; border-radius: 8px; background: rgba(255, 255, 255, 0.1); font: 500 11px/14px var(--font); color: #fff; }
+  #perf .btns button:disabled { opacity: 0.4; }
+  body.mobile #perf { left: 8px; bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 8px); width: 260px; }
+
+  /* Glass off (benchmark comparison): panels keep their tint, only the glass effect stops */
+  body.glass-off.wg #stage > .panel > canvas { visibility: hidden; }
+  body.glass-off.bd #stage > .lens { display: none; }
+  body.glass-off.gc #stage > .panel { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
   /* ---------- Portrait layout (phones): 430 px wide design frame, height follows the screen ---------- */
   body.mobile { --w: 430px; }
   body.mobile .header { height: 56px; padding: 8px 16px; }
@@ -710,11 +752,14 @@
   <button type="button" data-tone="light"><kbd>L</kbd>Light</button>
   <span class="sep" aria-hidden="true"></span>
   <button type="button" data-adjust aria-expanded="false" aria-controls="tune"><kbd>A</kbd>Adjust</button>
+  <button type="button" data-perf aria-pressed="false"><kbd>F</kbd>FPS</button>
 </div>
 
 <div id="lens-defs" aria-hidden="true"></div>
 
 <div id="tune" role="dialog" aria-label="Adjust glass"></div>
+
+<div id="perf" role="status" aria-label="Performance"></div>
 
 <div id="coach" role="dialog" aria-live="polite" aria-label="Tip">
   <span class="dots" aria-hidden="true"></span>
@@ -1263,6 +1308,9 @@
     movePanel: () => {},
     setTone: () => {},
     // Lift the card while it moves. Liquid DOM scales the glass; SVG backdrop and glasscn use CSS.
+    // Returns false when the mode cannot turn its glass off (Liquid DOM draws the whole UI)
+    setGlassEnabled: () => false,
+    glassInfo: () => '',
     liftPanel: (p, on) => {
       document.body.classList.toggle('card-lifted', on);
       if (p.glass && document.body.classList.contains('glass')) p.target = on ? 1.02 : 1;
@@ -1436,6 +1484,7 @@
       renderDom();
       adjust.refresh();
     };
+    view.glassInfo = () => 'Liquid DOM draws the whole UI (no off state)';
     adjust.register({
       mode: 'dom',
       base: OPTICS,
@@ -1615,6 +1664,11 @@
       renderBackdrop();
       adjust.refresh();
     };
+    view.setGlassEnabled = (on) => {
+      document.body.classList.toggle('glass-off', !on);
+      return true;
+    };
+    view.glassInfo = () => `${lenses.length} SVG backdrop filters`;
     adjust.register({
       mode: 'backdrop',
       base: BD_OPTICS,
@@ -1760,6 +1814,11 @@
       apply();
       adjust.refresh();
     };
+    view.setGlassEnabled = (on) => {
+      document.body.classList.toggle('glass-off', !on);
+      return true;
+    };
+    view.glassInfo = () => `${glasses.length} backdrop-filter panels`;
     adjust.register({
       mode: 'glasscn',
       base: GC_OPTICS,
@@ -1927,6 +1986,7 @@
     LiquidGlass.init({ root: stage, glassElements: PANELS.map((p) => p.el) })
       .then((ready) => {
         instance = ready;
+        globalThis.__wgInstance = ready;
         instance.markChanged();
         performance.mark('wg-ready');
       })
@@ -1955,6 +2015,21 @@
       renderWebgl();
       adjust.refresh();
     };
+    // Benchmark: pause the library render loop and hide the glass canvases
+    view.setGlassEnabled = (on) => {
+      document.body.classList.toggle('glass-off', !on);
+      if (!instance) return true;
+      if (on && !instance._running) {
+        instance._running = true;
+        instance._rafId = requestAnimationFrame(() => instance._renderLoop());
+        instance.markChanged();
+      } else if (!on && instance._running) {
+        instance._running = false;
+        cancelAnimationFrame(instance._rafId);
+      }
+      return true;
+    };
+    view.glassInfo = () => `${PANELS.filter((p) => p.visible !== false).length} WebGL glass panels`;
     adjust.register({
       mode: 'webgl',
       base: WG_OPTICS,
@@ -1964,6 +2039,206 @@
       render: renderWebgl,
     });
   }
+
+  /* ---------- Performance HUD: frame rate, frame time, dropped frames, glass on/off benchmark ---------- */
+  // The browser does not expose GPU or CPU load. The frame interval (requestAnimationFrame) shows it:
+  // when the GPU or the main thread cannot finish a frame in time, the interval grows and frames drop.
+  const perf = {
+    el: document.getElementById('perf'),
+    samples: [], // [time, frameMs]
+    last: 0,
+    raf: 0,
+    refreshMs: 1000 / 60,
+    longTasks: 0,
+    running: false,
+    bench: null,
+    benchResult: null,
+    gpu: (() => {
+      try {
+        const gl = document.createElement('canvas').getContext('webgl');
+        const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+        return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : (gl ? gl.getParameter(gl.RENDERER) : 'WebGL not available');
+      } catch {
+        return 'unknown';
+      }
+    })(),
+    stats(list) {
+      if (list.length < 2) return null;
+      const ms = list.map((x) => x[1]).sort((a, b) => a - b);
+      const sum = ms.reduce((a, b) => a + b, 0);
+      const span = list[list.length - 1][0] - list[0][0] + list[0][1];
+      const p = (q) => ms[Math.min(ms.length - 1, Math.floor(q * (ms.length - 1)))];
+      const dropped = ms.filter((v) => v > this.refreshMs * 1.5).length;
+      return {
+        fps: (list.length * 1000) / span,
+        avg: sum / ms.length,
+        p95: p(0.95),
+        max: ms[ms.length - 1],
+        dropped: (dropped / ms.length) * 100,
+      };
+    },
+    tick(now) {
+      if (!perf.running) return;
+      if (perf.last) {
+        const dt = now - perf.last;
+        perf.samples.push([now, dt]);
+        while (perf.samples.length && now - perf.samples[0][0] > 2000) perf.samples.shift();
+        if (perf.bench) perf.bench.current.push([now, dt]);
+      }
+      perf.last = now;
+      if (!perf.nextPaint || now > perf.nextPaint) {
+        perf.nextPaint = now + 250;
+        perf.render();
+      }
+      perf.raf = requestAnimationFrame(perf.tick);
+    },
+    measureRefresh() {
+      // Display refresh interval: the median frame interval of an idle second (60, 90, 120 Hz)
+      const ms = this.samples.map((x) => x[1]).sort((a, b) => a - b);
+      if (ms.length > 30) {
+        const median = ms[Math.floor(ms.length / 2)];
+        const rates = [60, 75, 90, 120, 144];
+        const hz = rates.reduce((best, r) => (Math.abs(1000 / r - median) < Math.abs(1000 / best - median) ? r : best), 60);
+        this.refreshMs = 1000 / hz;
+      }
+    },
+    graph() {
+      const w = 316;
+      const h = 36;
+      const pts = this.samples.slice(-120);
+      const max = Math.max(this.refreshMs * 3, ...pts.map((x) => x[1]));
+      const bars = pts.map(([, dt], i) => {
+        const bh = Math.max(1, (dt / max) * h);
+        const color = dt > this.refreshMs * 1.5 ? '#f87171' : '#a29bfe';
+        return `<rect x="${(i * w) / 120}" y="${h - bh}" width="${w / 120 - 0.5}" height="${bh}" fill="${color}"/>`;
+      }).join('');
+      const budget = h - (this.refreshMs / max) * h;
+      return `<svg class="graph" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">${bars}<line x1="0" x2="${w}" y1="${budget}" y2="${budget}" stroke="rgba(255,255,255,0.35)" stroke-dasharray="3 3"/></svg>`;
+    },
+    render() {
+      const st = this.stats(this.samples);
+      const hz = Math.round(1000 / this.refreshMs);
+      const fps = st ? st.fps : 0;
+      const cls = fps >= hz * 0.9 ? '' : fps >= hz * 0.6 ? 'warn' : 'bad';
+      const mem = performance.memory ? `${(performance.memory.usedJSHeapSize / 1048576).toFixed(0)} MB` : 'n/a (Chromium only)';
+      const lib = document.body.classList.contains('wg') && globalThis.__wgInstance ? ` · glass loop ${globalThis.__wgInstance.fps} fps` : '';
+      const b = this.benchResult;
+      const benchRows = b ? `
+        <div class="bench">
+          <table>
+            <tr><th>${b.title}</th><th>Glass on</th><th>Glass off</th></tr>
+            <tr><td>FPS</td><td>${b.on.fps.toFixed(1)}</td><td>${b.off.fps.toFixed(1)}</td></tr>
+            <tr><td>Frame avg</td><td>${b.on.avg.toFixed(1)} ms</td><td>${b.off.avg.toFixed(1)} ms</td></tr>
+            <tr><td>Frame p95</td><td>${b.on.p95.toFixed(1)} ms</td><td>${b.off.p95.toFixed(1)} ms</td></tr>
+            <tr><td>Worst</td><td>${b.on.max.toFixed(1)} ms</td><td>${b.off.max.toFixed(1)} ms</td></tr>
+            <tr><td>Dropped</td><td>${b.on.dropped.toFixed(1)}%</td><td>${b.off.dropped.toFixed(1)}%</td></tr>
+          </table>
+          <div class="dim">Glass cost: ${(b.on.avg - b.off.avg).toFixed(2)} ms per frame (budget ${this.refreshMs.toFixed(1)} ms at ${hz} Hz)</div>
+        </div>` : '';
+      const benchStatus = this.bench ? `Measuring: ${this.bench.label}. Do not touch the screen.` : '';
+      // Build the static parts once; later updates only change text, so the buttons stay clickable
+      if (!this.el.querySelector('[data-k="fps"]')) {
+        this.el.innerHTML = `
+          <div class="row"><span class="fps" data-k="fps"></span><span class="dim" data-k="hz"></span></div>
+          <div data-k="graph"></div>
+          <div class="row"><span>Frame avg, p95, worst</span><span data-k="frame"></span></div>
+          <div class="row"><span>Dropped frames (2 s)</span><span data-k="dropped"></span></div>
+          <div class="row"><span>Long tasks (&gt;50 ms)</span><span data-k="long"></span></div>
+          <div class="row"><span>JS heap</span><span data-k="mem"></span></div>
+          <div class="row"><span>Canvas</span><span data-k="canvas"></span></div>
+          <div class="row"><span>Glass</span><span data-k="glass"></span></div>
+          <div class="row"><span>GPU</span><span data-k="gpu"></span></div>
+          <div class="dim" data-k="status"></div>
+          <div data-k="bench"></div>
+          <div class="btns">
+            <button type="button" data-perf-act="bench">Compare glass on/off</button>
+            <button type="button" data-perf-act="close">Close</button>
+          </div>`;
+      }
+      const set = (k, v) => { const node = this.el.querySelector(`[data-k="${k}"]`); if (node.textContent !== v) node.textContent = v; };
+      const fpsNode = this.el.querySelector('[data-k="fps"]');
+      fpsNode.className = `fps ${cls}`;
+      set('fps', `${fps.toFixed(0)} fps`);
+      set('hz', `${hz} Hz display${lib}`);
+      this.el.querySelector('[data-k="graph"]').innerHTML = this.graph();
+      set('frame', st ? `${st.avg.toFixed(1)}, ${st.p95.toFixed(1)}, ${st.max.toFixed(0)} ms` : '-');
+      set('dropped', st ? `${st.dropped.toFixed(1)}%` : '-');
+      set('long', 'PerformanceLongTaskTiming' in window ? String(this.longTasks) : 'n/a');
+      set('mem', mem);
+      set('canvas', `${innerWidth}×${innerHeight} @${(devicePixelRatio || 1).toFixed(2)}x`);
+      set('glass', view.glassInfo() || '-');
+      set('gpu', String(this.gpu).slice(0, 26));
+      this.el.querySelector('[data-k="gpu"]').title = String(this.gpu);
+      set('status', benchStatus);
+      const benchNode = this.el.querySelector('[data-k="bench"]');
+      if (benchNode.dataset.v !== String(Boolean(b))) {
+        benchNode.dataset.v = String(Boolean(b));
+        benchNode.innerHTML = benchRows;
+      }
+      this.el.querySelector('[data-perf-act="bench"]').disabled = Boolean(this.bench);
+    },
+    start() {
+      if (this.running) return;
+      this.running = true;
+      this.last = 0;
+      this.samples = [];
+      document.body.classList.add('show-perf');
+      document.querySelectorAll('[data-perf]').forEach((el) => { el.classList.add('on'); el.setAttribute('aria-pressed', 'true'); });
+      this.raf = requestAnimationFrame(this.tick);
+      setTimeout(() => this.measureRefresh(), 1200);
+      if (!this.observer && 'PerformanceObserver' in window) {
+        try {
+          this.observer = new PerformanceObserver((list) => { this.longTasks += list.getEntries().length; });
+          this.observer.observe({ type: 'longtask', buffered: false });
+        } catch { /* longtask is Chromium only */ }
+      }
+    },
+    stop() {
+      this.running = false;
+      cancelAnimationFrame(this.raf);
+      document.body.classList.remove('show-perf');
+      document.querySelectorAll('[data-perf]').forEach((el) => { el.classList.remove('on'); el.setAttribute('aria-pressed', 'false'); });
+    },
+    toggle() {
+      if (this.running) this.stop();
+      else this.start();
+    },
+    // 6 s with glass on, 6 s with glass off, 1 s settle before each. The drift keeps the
+    // background moving, so the glass must re-render every frame (the worst case).
+    async benchmark() {
+      if (this.bench) return;
+      if (!view.setGlassEnabled(true)) {
+        this.benchResult = null;
+        showNotice('Liquid DOM draws the whole UI, so its glass cannot be turned off for a comparison. Use modes 2 to 4.');
+        return;
+      }
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const forceDrift = () => { lastInput = -Infinity; };
+      const phase = async (label, on) => {
+        view.setGlassEnabled(on);
+        this.bench = { label, current: [] };
+        forceDrift();
+        await wait(1000);
+        this.bench.current = [];
+        await wait(6000);
+        return this.stats(this.bench.current);
+      };
+      this.benchResult = null;
+      delete this.el.querySelector('[data-k="bench"]')?.dataset.v;
+      const onStats = await phase('glass on', true);
+      const offStats = await phase('glass off', false);
+      view.setGlassEnabled(true);
+      this.bench = null;
+      this.benchResult = { title: `${MODE_TITLES[activeMode]} · ${background.kind}`, on: onStats, off: offStats };
+      delete this.el.querySelector('[data-k="bench"]')?.dataset.v;
+      this.render();
+    },
+  };
+  perf.el.addEventListener('click', (event) => {
+    const act = event.target.closest('[data-perf-act]')?.dataset.perfAct;
+    if (act === 'close') perf.stop();
+    if (act === 'bench') perf.benchmark();
+  });
 
   /* ---------- Adjust panel ---------- */
   const adjust = {
@@ -2624,6 +2899,7 @@
       el.addEventListener('click', () => setTone(el.dataset.tone));
     });
     bar.querySelector('[data-adjust]')?.addEventListener('click', () => adjust.toggle());
+    bar.querySelector('[data-perf]')?.addEventListener('click', () => perf.toggle());
     setTone(tone.value);
     bar.querySelectorAll('button[data-mode]').forEach((el) => {
       el.classList.toggle('on', el.dataset.mode === active);
@@ -2648,6 +2924,7 @@
       if (key === 'd') return setTone('dark');
       if (key === 'l') return setTone('light');
       if (key === 'a') return adjust.toggle();
+      if (key === 'f') return perf.toggle();
       const next = MODES[Number(event.key) - 1];
       if (next && next !== active) goToMode(next);
     });
@@ -2727,6 +3004,7 @@
   requestAnimationFrame(applyState);
   requestAnimationFrame(driftFrame);
   coach.start();
+  if (params.has('fps')) perf.start();
 </script>
 </body>
 </html>

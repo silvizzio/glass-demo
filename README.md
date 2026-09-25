@@ -101,3 +101,19 @@ Every render mode has an **Adjust** panel for its optics. Open it with the **Adj
 - **Reset** returns the active mode and tone to the defaults.
 - **Copy link** copies a URL with the mode, tone, background and values (`?o=` base64url JSON), so a look can be shared exactly.
 - **Copy JSON** copies the values to set a new default in `index.html` (`OPTICS`, `BD_OPTICS`, `WG_OPTICS`, `GC_OPTICS` and `TONE_PRESETS`).
+
+## Performance HUD (index.html)
+
+Open with the **FPS** button in the top-center bar, the key `F`, or `?fps` in the URL.
+
+| Metric | Meaning |
+| --- | --- |
+| fps and graph | Frames per second from `requestAnimationFrame`; red bars are frames over 1.5 x the display interval |
+| Frame avg, p95, worst | Frame interval over the last 2 s |
+| Dropped frames | Share of frames that missed the display interval |
+| Long tasks | Main-thread tasks over 50 ms (Chromium only) |
+| JS heap, Canvas, GPU | Memory (Chromium only), viewport and pixel ratio, GPU name |
+
+**Compare glass on/off** runs 6 s with the glass on and 6 s with the glass off (the drift keeps the background moving, so the glass must re-render every frame) and shows the cost of the glass in ms per frame. Available in SVG backdrop, WebGL glass and glasscn. Liquid DOM draws the whole UI, so it has no off state.
+
+Browsers do not expose GPU or CPU load percentages. The frame interval shows the load: when the GPU or the main thread cannot finish a frame in time, the interval grows and frames drop.
