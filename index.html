@@ -84,34 +84,26 @@
 
   /* Panels: glass mode keeps content clear, the glass renders the surface */
   .panel { position: relative; overflow: hidden; border-radius: 20px; }
-  body.fallback .panel {
-    background: var(--surface);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    backdrop-filter: blur(14px) saturate(140%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 8px 24px rgba(0, 0, 0, 0.18);
-  }
-  body:is(.fallback, .svg) .panel.is-hidden { display: none; }
-  body:is(.fallback, .svg) .press { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-  body:is(.fallback, .svg) .press:active { transform: scale(0.96); }
+  body.bd .panel.is-hidden { display: none; }
+  body.bd .press { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  body.bd .press:active { transform: scale(0.96); }
 
-  /* SVG glass (liquid-glass-web-react): each lens refracts an aligned copy of the render */
-  body.svg .panel {
+  /* SVG backdrop glass (rebane2001 gist): each lens runs an SVG filter on the backdrop behind it */
+  body.bd .panel {
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.056) 0%, rgba(217, 237, 245, 0.012) 42%, rgba(209, 235, 242, 0.032) 100%),
-      linear-gradient(90deg, rgba(0, 0, 0, var(--svg-tint, 0.12)) 0%, rgba(0, 0, 0, var(--svg-tint, 0.12)) 100%);
+      linear-gradient(90deg, rgba(0, 0, 0, var(--bd-tint, 0.12)) 0%, rgba(0, 0, 0, var(--bd-tint, 0.12)) 100%);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
   }
   #stage > .lens {
     position: absolute;
-    overflow: hidden;
     pointer-events: none;
     transform-origin: 50% 50%;
     transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   #stage > .lens.pressed { transform: scale(0.96); }
   #stage > .lens.is-hidden { display: none; }
-  #stage > .lens > .backdrop { position: absolute; }
-  #lens-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  #lens-defs { position: absolute; left: -9999px; top: -9999px; width: 0; height: 0; overflow: hidden; }
 
   .label-caps {
     font-weight: 700;
@@ -142,9 +134,9 @@
     border-radius: 20px;
   }
   .tab.on { font-weight: 600; background: rgba(0, 0, 0, 0.1); }
-  body:is(.fallback, .svg) .panel[data-panel^="tab-"] { background: var(--surface-quiet); }
-  body:is(.fallback, .svg) .panel[data-panel^="tab-"].on { background: var(--surface-active); }
-  body:is(.fallback, .svg) .tab.on { background: none; }
+  body.bd .panel[data-panel^="tab-"] { background: var(--surface-quiet); }
+  body.bd .panel[data-panel^="tab-"].on { background: var(--surface-active); }
+  body.bd .tab.on { background: none; }
 
   /* Timeline */
   .timeline { display: flex; align-items: center; width: 100%; height: 100%; padding: 12px 16px; gap: 8px; }
@@ -381,7 +373,7 @@
   #tune .row button { flex: 1; padding: 6px 0; border-radius: 8px; background: var(--white-10); font-size: 12px; }
 
   @media (prefers-reduced-motion: reduce) {
-    .backdrop .render, .tl-thumb, body:is(.fallback, .svg) .press, #stage > .lens { transition: none; }
+    .backdrop .render, .tl-thumb, body.bd .press, #stage > .lens { transition: none; }
   }
 </style>
 </head>
@@ -396,8 +388,7 @@
 
 <div id="modes" role="group" aria-label="Glass renderer">
   <button type="button" data-mode="dom"><kbd>1</kbd>Liquid DOM</button>
-  <button type="button" data-mode="svg"><kbd>2</kbd>SVG glass</button>
-  <button type="button" data-mode="css"><kbd>3</kbd>CSS</button>
+  <button type="button" data-mode="backdrop"><kbd>2</kbd>SVG backdrop</button>
 </div>
 
 <div id="lens-defs" aria-hidden="true"></div>
@@ -632,20 +623,19 @@
     shadowOffsetY: 8,
   };
 
-  // SVG glass (liquid-glass-web-react engine), starting values. Tune with ?tune and paste the copied JSON here.
-  const SVG_GLASS_URL = './vendor/liquid-glass-engine.js';
-  const SVG_OPTICS = {
-    refraction: 22,
-    chromaticAberration: 0.25,
-    blur: 3,
-    depth: 18,
-    curvature: 0.65,
-    splay: 1,
-    glow: 0.12,
-    edgeHighlight: 0.35,
-    edgeWidth: 2,
-    specular: 1,
-    specularAngle: 45,
+  // SVG backdrop glass (rebane2001 gist), starting values. Tune with ?tune and paste the copied JSON here.
+  // Names follow the gist controls. Opacity values are 0 to 255, blur values are px.
+  const BD_OPTICS = {
+    darknessOpacity: 17,
+    darknessBlur: 5,
+    lightnessOpacity: 17,
+    lightnessBlur: 15,
+    centerDistortion: 68,
+    centerSize: 15,
+    preBlur: 0.7,
+    postBlur: 0,
+    iridescence: 20,
+    refraction: 150,
     tint: 0.12,
   };
   const LENS_MARGIN = 48;
@@ -736,19 +726,6 @@
     header.style.left = '0';
     header.style.top = '0';
     stage.append(header);
-  }
-
-  /* ---------- Fallback: plain DOM with CSS frosted panels ---------- */
-  function startFallback() {
-    document.body.classList.remove('glass', 'svg');
-    document.body.classList.add('fallback');
-    const stage = mountStage({ withBackdrop: true });
-    mountHeader(stage);
-
-    view.setVisible = (p, visible) => {
-      p.visible = visible;
-      p.el.classList.toggle('is-hidden', !visible);
-    };
   }
 
   /* ---------- Liquid glass: liquid-dom scene ---------- */
@@ -849,90 +826,143 @@
     if (params.has('tune')) buildDomTuner(container);
   }
 
-  /* ---------- SVG glass: liquid-glass-web-react engine, one lens per panel ---------- */
-  async function startSvg() {
-    const { LiquidGlassEngine } = await import(SVG_GLASS_URL);
-    await document.fonts.ready;
-    document.body.classList.remove('glass', 'fallback');
-    document.body.classList.add('svg');
-    document.body.style.setProperty('--svg-tint', String(SVG_OPTICS.tint));
+  /* ---------- SVG backdrop glass: rebane2001 gist, one filter per panel ---------- */
+  // Each lens is larger than its panel by LENS_MARGIN, so the edge refraction can sample pixels
+  // outside the panel. The lens mask clips the result to the panel shape. This replaces the
+  // gist's fixed feOffset and clip-path offsets, which only fit one 200 px square.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
-    const defsRoot = document.getElementById('lens-defs');
-    const stage = document.getElementById('stage');
-    const optics = { ...SVG_OPTICS };
-    let scale = 1;
+  function svgUrl(width, height, body) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  }
 
-    // Lens boxes go between the backdrop and the panels. Each box is larger than its panel,
-    // so the refraction can pull pixels from beyond the panel edge.
-    const lenses = [];
-    const buildLenses = () => {
-      for (const p of PANELS) {
-        const box = document.createElement('div');
-        box.className = 'lens';
-        box.style.left = `${p.x - LENS_MARGIN}px`;
-        box.style.top = `${p.y - LENS_MARGIN}px`;
-        box.style.width = `${p.w + LENS_MARGIN * 2}px`;
-        box.style.height = `${p.h + LENS_MARGIN * 2}px`;
-        const copy = backdrop.cloneNode(true);
-        copy.removeAttribute('data-part');
-        copy.setAttribute('aria-hidden', 'true');
-        box.append(copy);
-        stage.insertBefore(box, PANELS[0].el);
-        const defsHost = document.createElement('div');
-        defsRoot.append(defsHost);
-        p.lens = box;
-        p.lensCopy = copy;
-        p.engine = new LiquidGlassEngine({ container: box, filtered: box, defsHost }, engineOptions(p));
-        p.engine.setPosition(0.5, 0.5);
-        lenses.push(p);
-      }
+  function lensImages(p, o) {
+    const W = p.w + LENS_MARGIN * 2;
+    const H = p.h + LENS_MARGIN * 2;
+    const rect = (fill, style = '') => `<rect x="${LENS_MARGIN}" y="${LENS_MARGIN}" width="${p.w}" height="${p.h}" rx="${p.r}" fill="${fill}"${style ? ` style="${style}"` : ''}/>`;
+    return {
+      // thing9: dark inner edge (multiplied)
+      darkness: svgUrl(W, H, rect(`rgba(0,0,0,${o.darknessOpacity / 255})`) + rect('#fff', `filter:blur(${o.darknessBlur}px)`)),
+      // thing0: soft light glow (screened)
+      lightness: svgUrl(W, H, rect(`rgba(255,255,255,${o.lightnessOpacity / 255})`, `filter:blur(${o.lightnessBlur}px)`)),
+      // thing1: lens shape mask
+      mask: svgUrl(W, H, rect('#000')),
+      // thing2: displacement map. Blue = x, green = y, blurred neutral centre.
+      map: svgUrl(W, H,
+        '<defs>' +
+        `<linearGradient id="gx" gradientUnits="userSpaceOnUse" x1="${LENS_MARGIN}" y1="0" x2="${LENS_MARGIN + p.w}" y2="0"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#00f"/></linearGradient>` +
+        `<linearGradient id="gy" gradientUnits="userSpaceOnUse" x1="0" y1="${LENS_MARGIN}" x2="0" y2="${LENS_MARGIN + p.h}"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#0f0"/></linearGradient>` +
+        '</defs>' +
+        `<rect x="0" y="0" width="${W}" height="${H}" fill="#7f7f7f"/>` +
+        rect('#000') +
+        rect('url(#gx)', 'mix-blend-mode:screen') +
+        rect('url(#gy)', 'mix-blend-mode:screen') +
+        rect(`rgba(127,127,127,${(255 - o.centerDistortion) / 255})`, `filter:blur(${Math.max(0, 20 - o.centerSize)}px)`)),
     };
+  }
 
-    // Engine sizes are in screen px, because it measures the filtered box with getBoundingClientRect.
-    function engineOptions(p) {
-      const W = (p.w + LENS_MARGIN * 2) * scale;
-      const H = (p.h + LENS_MARGIN * 2) * scale;
-      const displacement = optics.refraction * scale;
-      return {
-        width: p.w * scale,
-        height: p.h * scale,
-        radius: p.r * scale,
-        strength: (displacement * Math.SQRT2) / Math.sqrt(W * W + H * H),
-        chromaticAberration: optics.chromaticAberration,
-        blur: optics.blur * scale,
-        depth: optics.depth * scale,
-        curvature: optics.curvature,
-        splay: optics.splay,
-        glow: optics.glow,
-        edgeHighlight: optics.edgeHighlight,
-        edgeWidth: optics.edgeWidth * scale,
-        specular: optics.specular,
-        specularAngle: optics.specularAngle,
-      };
+  function el(name, attrs = {}) {
+    const node = document.createElementNS(SVG_NS, name);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+    return node;
+  }
+
+  function buildLensFilter(p, id, o) {
+    const W = p.w + LENS_MARGIN * 2;
+    const H = p.h + LENS_MARGIN * 2;
+    const filter = el('filter', {
+      id,
+      filterUnits: 'userSpaceOnUse',
+      primitiveUnits: 'userSpaceOnUse',
+      x: 0,
+      y: 0,
+      width: W,
+      height: H,
+      'color-interpolation-filters': 'sRGB',
+    });
+    const image = (result) => {
+      const node = el('feImage', { x: 0, y: 0, width: W, height: H, preserveAspectRatio: 'none', result });
+      filter.append(node);
+      return node;
+    };
+    const refs = {
+      darkness: image('darkness'),
+      lightness: image('lightness'),
+      mask: image('mask'),
+      map: image('map'),
+      preBlur: el('feGaussianBlur', { in: 'SourceGraphic', stdDeviation: o.preBlur, result: 'preblur' }),
+      disp: [],
+      postBlur: null,
+    };
+    filter.append(refs.preBlur);
+    const channels = [
+      '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0',
+      '0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0',
+      '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0',
+    ];
+    ['dispR', 'dispG', 'dispB'].forEach((result, i) => {
+      const d = el('feDisplacementMap', { in: 'preblur', in2: 'map', scale: -150, xChannelSelector: 'B', yChannelSelector: 'G' });
+      filter.append(d, el('feColorMatrix', { type: 'matrix', values: channels[i], result }));
+      refs.disp.push(d);
+    });
+    filter.append(el('feBlend', { in: 'dispB', in2: 'dispG', mode: 'screen', result: 'rgb1' }));
+    filter.append(el('feBlend', { in: 'rgb1', in2: 'dispR', mode: 'screen', result: 'rgb' }));
+    refs.postBlur = el('feGaussianBlur', { in: 'rgb', stdDeviation: o.postBlur, result: 'post' });
+    filter.append(refs.postBlur);
+    filter.append(el('feBlend', { in: 'post', in2: 'lightness', mode: 'screen', result: 'lit' }));
+    filter.append(el('feBlend', { in: 'lit', in2: 'darkness', mode: 'multiply', result: 'shaded' }));
+    filter.append(el('feComposite', { in: 'shaded', in2: 'mask', operator: 'in' }));
+    return { filter, refs };
+  }
+
+  function applyLensOptics(lens, p, o) {
+    const images = lensImages(p, o);
+    for (const key of ['darkness', 'lightness', 'mask', 'map']) {
+      lens.refs[key].setAttributeNS(XLINK_NS, 'xlink:href', images[key]);
+      lens.refs[key].setAttribute('href', images[key]);
     }
+    lens.refs.preBlur.setAttribute('stdDeviation', o.preBlur);
+    lens.refs.postBlur.setAttribute('stdDeviation', o.postBlur);
+    const base = -o.refraction;
+    const spread = o.iridescence / 10;
+    lens.refs.disp[0].setAttribute('scale', base + spread);
+    lens.refs.disp[1].setAttribute('scale', base);
+    lens.refs.disp[2].setAttribute('scale', base - spread);
+  }
 
-    // Keep each render copy exactly on top of the real backdrop
-    const alignCopies = (s, ox, oy) => {
-      const bleed = bleedRect(s, ox, oy);
-      for (const p of lenses) {
-        p.lensCopy.style.left = `${bleed.x - (p.x - LENS_MARGIN)}px`;
-        p.lensCopy.style.top = `${bleed.y - (p.y - LENS_MARGIN)}px`;
-        p.lensCopy.style.width = `${bleed.width}px`;
-        p.lensCopy.style.height = `${bleed.height}px`;
-      }
-    };
+  async function startBackdrop() {
+    await document.fonts.ready;
+    document.body.classList.remove('glass');
+    document.body.classList.add('bd');
+    const optics = { ...BD_OPTICS };
+    document.body.style.setProperty('--bd-tint', String(optics.tint));
 
-    const onFit = (s, ox, oy) => {
-      scale = s;
-      if (!lenses.length) return;
-      alignCopies(s, ox, oy);
-      for (const p of lenses) p.engine.setOptions(engineOptions(p));
-    };
+    const svg = el('svg', { width: 0, height: 0, 'aria-hidden': 'true' });
+    document.getElementById('lens-defs').append(svg);
 
-    mountStage({ withBackdrop: true, onFit });
+    const stage = mountStage({ withBackdrop: true });
     mountHeader(stage);
-    buildLenses();
-    dispatchEvent(new Event('resize'));
+
+    const lenses = [];
+    PANELS.forEach((p, index) => {
+      const id = `lens-${index}`;
+      const lens = buildLensFilter(p, id, optics);
+      svg.append(lens.filter);
+      applyLensOptics(lens, p, optics);
+      p.lensFilter = lens;
+      const box = document.createElement('div');
+      box.className = 'lens';
+      box.style.left = `${p.x - LENS_MARGIN}px`;
+      box.style.top = `${p.y - LENS_MARGIN}px`;
+      box.style.width = `${p.w + LENS_MARGIN * 2}px`;
+      box.style.height = `${p.h + LENS_MARGIN * 2}px`;
+      box.style.backdropFilter = `url(#${id})`;
+      stage.insertBefore(box, PANELS[0].el);
+      p.lens = box;
+      lenses.push({ p, lens });
+    });
 
     for (const p of PANELS.filter((item) => item.press)) {
       const down = () => p.lens.classList.add('pressed');
@@ -950,24 +980,23 @@
     if (params.has('tune')) {
       buildTuner({
         controls: [
-          ['refraction', 0, 80, 1],
-          ['chromaticAberration', 0, 1, 0.01],
-          ['blur', 0, 16, 0.5],
-          ['depth', 1, 80, 1],
-          ['curvature', 0, 1, 0.01],
-          ['splay', 0, 1, 0.01],
-          ['glow', 0, 1, 0.01],
-          ['edgeHighlight', 0, 1, 0.01],
-          ['edgeWidth', 0, 12, 0.5],
-          ['specular', 0, 2, 0.05],
-          ['specularAngle', 0, 360, 1],
+          ['refraction', 0, 300, 1],
+          ['centerDistortion', 0, 255, 1],
+          ['centerSize', 0, 20, 0.5],
+          ['preBlur', 0, 10, 0.1],
+          ['postBlur', 0, 10, 0.1],
+          ['iridescence', 0, 50, 1],
+          ['darknessOpacity', 0, 255, 1],
+          ['darknessBlur', 0, 50, 0.5],
+          ['lightnessOpacity', 0, 255, 1],
+          ['lightnessBlur', 0, 50, 0.5],
           ['tint', 0, 0.6, 0.01],
         ],
         state: optics,
         apply: (key, value) => {
           optics[key] = value;
-          if (key === 'tint') document.body.style.setProperty('--svg-tint', String(value));
-          else for (const p of lenses) p.engine.setOptions(engineOptions(p));
+          if (key === 'tint') document.body.style.setProperty('--bd-tint', String(value));
+          else for (const item of lenses) applyLensOptics(item.lens, item.p, optics);
         },
         exportJson: () => ({ ...optics }),
       });
@@ -1122,13 +1151,12 @@
   });
 
   /* ---------- Render mode switch ---------- */
-  const MODES = ['dom', 'svg', 'css'];
+  const MODES = ['dom', 'backdrop'];
   const domSupported = supportsLiquidGlass();
 
   function goToMode(next) {
     const url = new URL(location.href);
     url.searchParams.set('glass', next);
-    url.searchParams.delete('fallback');
     location.href = url.toString();
   }
 
@@ -1167,12 +1195,16 @@
   }
 
   /* ---------- Boot ---------- */
-  const requested = params.get('glass') ?? (params.has('fallback') ? 'css' : null);
-  let mode = MODES.includes(requested) ? requested : (domSupported ? 'dom' : 'svg');
+  const UA = navigator.userAgent;
+  const IS_IOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const IS_CHROMIUM = !IS_IOS && /Chrome\/|Chromium\/|Edg\//.test(UA);
+
+  const requested = params.get('glass');
+  let mode = MODES.includes(requested) ? requested : (domSupported ? 'dom' : 'backdrop');
   if (mode === 'dom' && !domSupported) {
-    mode = 'svg';
+    mode = 'backdrop';
     if (requested === 'dom') {
-      showNotice('Liquid DOM needs desktop Chrome with <code>chrome://flags/#canvas-draw-element</code> enabled. Showing SVG glass.');
+      showNotice('Liquid DOM needs desktop Chrome with <code>chrome://flags/#canvas-draw-element</code> enabled. Showing SVG backdrop glass.');
     }
   }
 
@@ -1182,22 +1214,15 @@
         await startGlass();
         return 'dom';
       } catch (error) {
-        console.error('Liquid DOM failed, using SVG glass.', error);
-        showNotice('Liquid DOM failed to start. Showing SVG glass.');
-        return boot('svg');
+        console.error('Liquid DOM failed, using SVG backdrop glass.', error);
+        showNotice('Liquid DOM failed to start. Showing SVG backdrop glass.');
       }
     }
-    if (target === 'svg') {
-      try {
-        await startSvg();
-        return 'svg';
-      } catch (error) {
-        console.error('SVG glass failed, using CSS.', error);
-        showNotice('SVG glass failed to start. Showing the CSS version.');
-      }
+    await startBackdrop();
+    if (!IS_CHROMIUM) {
+      showNotice('SVG backdrop glass needs a Chromium browser (Chrome, Edge, Arc). This browser shows the panels without glass.');
     }
-    startFallback();
-    return 'css';
+    return 'backdrop';
   }
 
   const activeMode = await boot(mode);

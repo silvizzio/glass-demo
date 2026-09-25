@@ -36,14 +36,13 @@ npm run build
 
 ## Render modes (index.html)
 
-The single-file demo has three renderers for the same UI. Use the switch at top center, the keys `1`, `2`, `3`, or `?glass=` in the URL.
+The single-file demo has two renderers for the same UI. Use the switch at top center, the keys `1` and `2`, or `?glass=` in the URL.
 
-| Mode | URL | Library | Browsers |
+| Mode | URL | Technique | Browsers |
 | --- | --- | --- | --- |
 | Liquid DOM | `?glass=dom` | [liquid-dom](https://github.com/AndrewPrifer/liquid-dom), WebGPU | Desktop Chrome with `chrome://flags/#canvas-draw-element` enabled |
-| SVG glass | `?glass=svg` | [liquid-glass-web-react](https://github.com/PallavAg/liquid-glass-web-react) engine, SVG `feDisplacementMap` | Chrome, Safari, Firefox, desktop and mobile |
-| CSS | `?glass=css` | None, CSS `backdrop-filter` | All |
+| SVG backdrop | `?glass=backdrop` | `backdrop-filter: url(#svg-filter)`, after [rebane2001's gist](https://gist.github.com/rebane2001/8ba35ad6e1b17c4cb5b2b2431d9e992c) | Chromium browsers (Chrome, Edge, Arc). Safari and Firefox show the panels without glass. |
 
-Default: Liquid DOM when the browser supports it, else SVG glass. Add `?tune` for optics sliders of the active mode.
+Default: Liquid DOM when the browser supports it, else SVG backdrop. Add `?tune` for optics sliders of the active mode.
 
-`vendor/liquid-glass-engine.js` is the plain-DOM engine of liquid-glass-web-react (commit 8c61545), built without React.
+SVG backdrop generates one filter for each panel, sized to that panel. Each lens is larger than its panel, so the edge refraction can sample pixels outside the panel, and a rounded-rect mask clips the result to the panel shape.
