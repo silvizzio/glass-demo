@@ -1,40 +1,31 @@
-# glass-demo
+# DSO Liquid Glass Study
 
-Liquid glass demo of the DSO kiosk frame (Figma node 1137:43652, "UI 5") built with [liquid-dom](https://github.com/AndrewPrifer/liquid-dom) in one HTML file. No build step.
+Next.js demo of the [DSO Figma screen](https://www.figma.com/design/HDKkmAbZLVTnUshUIqXIZy/DSO?node-id=1137-43652) with a working timeline, exploration modes, asset chips, place selection, map controls, and adjustable glass treatment.
 
-## Run
+## Run on your Mac
 
-```sh
-cd ~/Documents/Vizzio/Git/glass-demo
-python3 -m http.server 5173 --bind 127.0.0.1
+```bash
+mkdir -p "$HOME/Documents/Vizzio/Git"
+cd "$HOME/Documents/Vizzio/Git"
+git clone https://github.com/silvizzio/glass-demo.git
+cd glass-demo
+npm install
+npm run dev
 ```
 
-Open http://127.0.0.1:5173 in desktop Chrome.
+Open http://localhost:3000. Use Node.js 20.9 or newer. If you have already cloned the project, run `git pull --ff-only` from `glass-demo` instead of cloning again.
 
-## Browser requirements
+## GPU glass mode
 
-Liquid glass needs WebGPU and the HTML-in-Canvas API.
+The normal view is a CSS preview so that you can inspect the layout on any browser. The **Enable GPU glass** control mounts `@liquid-dom/react` `LiquidCanvas`, with a background `Html` node and `GlassContainer`/`Glass` shapes at the same positions as the UI panels. It is a real liquid-dom rendering path, not a CSS effect labeled as WebGPU.
 
-1. Open `chrome://flags/#canvas-draw-element`.
-2. Set it to **Enabled**.
-3. Restart Chrome.
+For the live refracting background and DOM-backed image, use a current Chrome version with WebGPU. Set `chrome://flags/#canvas-draw-element` to **Enabled** and restart Chrome. This experimental flag is currently required by liquid-dom for HTML-in-Canvas. Then turn on **Enable GPU glass**. If WebGPU is unavailable or the renderer fails, the page keeps its CSS preview and shows the reason in the glass controls.
 
-If the page does not find the API (iPhone, Safari, or Chrome without the flag), it shows the same UI with CSS frosted panels.
+The background, logos, and media come from the Figma frame assets already in this repository. Copies in `public/` let Next.js serve them directly. The earlier single-file prototype remains available at `index.html` with its assets in `assets/`.
 
-## URL options
+## Checks
 
-| Option | Result |
-| --- | --- |
-| `?tune` | Shows sliders for the glass optics. "Copy values" copies JSON for the `OPTICS` object in `index.html`. |
-| `?fallback` | Forces the CSS frosted version, for side-by-side comparison. |
-
-## Interaction
-
-Mode tabs, timeline stops and arrows, asset chips, map controls, zoom in and out on the render, detail card close (reopen from District IO in Areas of interest), and gallery thumbnails.
-
-## Files
-
-| Path | Content |
-| --- | --- |
-| `index.html` | Markup, CSS, and the module script |
-| `assets/` | Assets exported from the Figma frame |
+```bash
+npm run typecheck
+npm run build
+```
